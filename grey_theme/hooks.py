@@ -1,3 +1,4 @@
+from . import __version__ as app_version
 app_name = "grey_theme"
 app_title = "Grey Theme"
 app_publisher = "siva"
@@ -14,7 +15,10 @@ app_include_css = "/assets/grey_theme/css/theme.css"
 # app_include_js = "/assets/grey_theme/js/grey_theme.js"
 
 # include js, css files in header of web template
-# web_include_css = "/assets/grey_theme/css/grey_theme.css"
+web_include_css = [
+    "/assets/grey_theme/css/login.css",
+    "/assets/grey_theme/css/dv-login.css?ver=" + app_version
+]
 # web_include_js = "/assets/grey_theme/js/grey_theme.js"
 
 # include custom scss in every website theme (without file extension ".scss")
