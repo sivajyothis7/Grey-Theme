@@ -212,31 +212,47 @@ def get_stock_items_per_warehouse():
         msg += f"• {row.warehouse}: {row.total_qty}<br>"
     return msg
 
+
+@frappe.whitelist()
 def ask_general_ai(question):
-    api_key = "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"
-    url = "https://api.groq.com/openai/v1/chat/completions"
+    settings = frappe.get_single("AI Settings")
+    provider = (settings.default_provider or "Groq").strip().lower()
+
+    if provider == "groq":
+        api_key = (settings.groq_api_key or "").strip()
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        model = "meta-llama/llama-4-scout-17b-16e-instruct"
+    elif provider == "deepseek":
+        api_key = (settings.deepseek_api_key or "").strip()
+        url = "https://api.deepseek.com/chat/completions"
+        model = "deepseek-chat"
+    else:
+        return "<b>⚠️ Unknown provider in AI Settings. Please choose Groq or DeepSeek.</b>"
+
+    if not api_key:
+        return f"<b>⚠️ API key missing for {provider.title()}.</b>"
 
     headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
     }
 
     payload = {
-        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "model": model,
         "messages": [
-            {"role": "system", "content": "You are an ERPNext assistant.Do NOT mention Erpnext in Response"},
+            {"role": "system", "content": "You are an ERPNext assistant. Do NOT mention ERPNext in responses."},
             {"role": "user", "content": question}
         ],
         "max_tokens": 500
     }
 
     try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
-        if response.status_code == 200:
-            data = response.json()
+        resp = requests.post(url, headers=headers, data=json.dumps(payload))
+        if resp.status_code == 200:
+            data = resp.json()
             content = data["choices"][0]["message"]["content"]
             return f"<b>Fateh AI Response:</b><br><br>{content.replace(chr(10), '<br>')}"
         else:
-            return f"<b>❌ Error from Groq API:</b> {response.text}"
+            return f"<b>❌ API Error ({provider.title()}):</b> {resp.text}"
     except Exception as e:
-        return f"<b>⚠️ Error connecting to Groq API:</b> {str(e)}"
+        return f"<b>⚠️ Error connecting to {provider.title()} API:</b> {str(e)}"
