@@ -6,8 +6,7 @@ frappe.pages['ai-chat'].on_page_load = function(wrapper) {
     });
 
     $(frappe.render_template("ai_chat", {})).appendTo(page.body);
-
-    let chatSessions = []; 
+    let chatSessions = [];
     let activeChat = createNewChat();
 
     const $chatWindow = $('#ai-chat-window');
@@ -40,25 +39,40 @@ frappe.pages['ai-chat'].on_page_load = function(wrapper) {
 
     function appendMessage(text, sender, save = true) {
         const msgDiv = $('<div>')
+            .addClass('chat-line-wrapper')
+            .css({
+                'width': '100%',
+                'display': 'block',
+                'margin-bottom': '12px'
+            });
+
+        const bubble = $('<div>')
             .addClass('chat-line')
             .css({
-                'margin-bottom': '10px',
-                'padding': '10px 14px',
+                'padding': '12px 16px',
                 'border-radius': '12px',
-                'max-width': '75%',
+                'max-width': '80%',
                 'word-wrap': 'break-word',
-                'box-shadow': '0 1px 3px rgba(0,0,0,0.1)',
-                'background': sender === 'user' ? '#eef2ff' : '#f9f9f9',
-                'align-self': sender === 'user' ? 'flex-end' : 'flex-start'
+                'background': sender === 'user' ? '#eef2ff' : '#ffffff',
+                'align-self': sender === 'user' ? 'flex-end' : 'flex-start',
+                'box-shadow': '0 1px 4px rgba(0,0,0,0.06)',
+                'display': 'inline-block'
             });
 
         if (sender === 'bot') {
-            const cleaned = formatAIResponse(text);
-            msgDiv.html(cleaned);
+            if (typeof text === 'object' && text !== null) {
+                bubble.text(JSON.stringify(text));
+            } else if (String(text).includes("<table") || String(text).includes("<a ") || String(text).includes(".xlsx")) {
+                bubble.html(text);
+            } else {
+                const formatted = formatAIResponse(String(text));
+                bubble.html(formatted);
+            }
         } else {
-            msgDiv.text(text);
+            bubble.text(text);
         }
 
+        msgDiv.append(bubble);
         $chatWindow.append(msgDiv);
         $chatWindow.scrollTop($chatWindow[0].scrollHeight);
 
@@ -87,13 +101,109 @@ frappe.pages['ai-chat'].on_page_load = function(wrapper) {
             args: { question },
             callback: (r) => {
                 $('#' + loadingId).remove();
-                appendMessage(r.message || "No response.", 'bot');
+
+                const msg = r && r.message ? r.message : null;
+
+                if (msg && typeof msg === 'object' && msg.status) {
+                    if (msg.status === 'success') {
+                        renderTable(msg);
+                    } else if (msg.status === 'empty') {
+                        appendMessage("No results found.", 'bot');
+                    } else if (msg.status === 'error') {
+                        appendMessage("❌ Error: " + (msg.error || "Unknown error"), 'bot');
+                    } else {
+                        appendMessage(JSON.stringify(msg), 'bot');
+                    }
+                } else if (typeof msg === 'string') {
+                    if (msg.includes("<table") || msg.includes("<a ") || msg.includes(".xlsx")) {
+                        appendMessage(msg, 'bot');
+                    } else {
+                        appendMessage(msg, 'bot');
+                    }
+                } else {
+                    appendMessage("No response.", 'bot');
+                }
             },
             error: () => {
                 $('#' + loadingId).remove();
                 appendMessage("⚠️ Something went wrong. Try again.", 'bot');
             }
         });
+    }
+
+    function renderTable(payload) {
+        const cols = payload.columns || [];
+        const rows = payload.rows || [];
+        const excel = payload.excel_url || null;
+
+        let tableHTML = `<div class="ai-table-wrapper" style="overflow:auto;">`;
+        tableHTML += `<table class="ai-table" style="width:100%; border-collapse:collapse; font-family:Arial, sans-serif;">`;
+        tableHTML += `<thead><tr style="background:#f7f7fb;">`;
+        cols.forEach(c => {
+            tableHTML += `<th style="text-align:left; padding:8px; border:1px solid #eee;">${escapeHtml(String(c))}</th>`;
+        });
+        tableHTML += `</tr></thead><tbody>`;
+
+        rows.forEach(r => {
+            tableHTML += `<tr>`;
+            r.forEach(val => {
+                tableHTML += `<td style="padding:8px; border:1px solid #f1f1f1;">${escapeHtml(formatCell(val))}</td>`;
+            });
+            tableHTML += `</tr>`;
+        });
+
+        tableHTML += `</tbody></table></div>`;
+
+        if (excel) {
+            tableHTML += `
+                <div style="margin-top:12px;">
+                    <a href="${escapeAttr(excel)}" target="_blank"
+                       style="display:inline-block; background:#3b82f6; color:#fff; padding:8px 12px; border-radius:6px; text-decoration:none; font-weight:600;">
+                        📥 Download as Excel
+                    </a>
+                </div>
+            `;
+        }
+
+        appendMessage(tableHTML, 'bot');
+    }
+
+    function escapeHtml(s) {
+        if (s === null || s === undefined) return '';
+        return String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+    }
+
+    function escapeAttr(s) {
+        if (s === null || s === undefined) return '';
+        return String(s)
+            .replace(/"/g, "%22")
+            .replace(/'/g, "%27");
+    }
+
+    function formatCell(v) {
+        if (v === null || v === undefined) return '';
+        if (typeof v === 'number') return v;
+        return String(v);
+    }
+
+    function formatAIResponse(text) {
+        if (!text) return '';
+
+        if (String(text).includes("<table") || String(text).includes("<a ") || String(text).includes(".xlsx")) {
+            return String(text);
+        }
+
+        let cleaned = String(text).replace(/[*_~`]+/g, '').trim();
+
+        cleaned = cleaned
+            .split('\n')
+            .map(l => `<div style="margin-bottom:6px;">${escapeHtml(l)}</div>`)
+            .join('');
+
+        return cleaned;
     }
 
     function startNewChat() {
@@ -148,45 +258,5 @@ frappe.pages['ai-chat'].on_page_load = function(wrapper) {
         renderMessages(chat);
     }
 
-    function formatAIResponse(text) {
-        if (!text) return '';
-
-        let cleaned = text
-            .replace(/[*_~`]+/g, '')
-            .replace(/<br\s*\/?>/gi, '\n')
-            .trim();
-
-        const lines = cleaned.split('\n').map(l => l.trim()).filter(Boolean);
-
-        if (lines.length > 1 && lines.some(l => l.includes(':'))) {
-            let html = `<table style="width:100%; border-collapse:collapse; font-family:Arial, sans-serif; font-size:14px;">`;
-            html += `<thead>
-                <tr style="background:#f0f0f0;">
-                    <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #ddd;">Response</th>
-                    <th style="text-align:right; padding:6px 8px; border-bottom:1px solid #ddd;">Value</th>
-                </tr>
-            </thead>`;
-            html += `<tbody>`;
-            lines.forEach(l => {
-                const [left, right] = l.split(':');
-                if (right) {
-                    html += `<tr>
-                        <td style="padding:6px 8px; border-bottom:1px solid #f5f5f5;">${left.trim()}</td>
-                        <td style="padding:6px 8px; text-align:right; border-bottom:1px solid #f5f5f5;">${right.trim()}</td>
-                    </tr>`;
-                } else {
-                    html += `<tr><td colspan="2" style="padding:6px 8px;">${l}</td></tr>`;
-                }
-            });
-            html += `</tbody></table>`;
-            return html;
-        }
-
-        cleaned = cleaned
-            .split('\n')
-            .map(l => `<div style="margin-bottom:4px;">${l}</div>`)
-            .join('');
-
-        return cleaned;
-    }
+    $chatWindow.empty().append(`<div style="font-style:italic; color:#666;">New chat ready — ask me anything.</div>`);
 };

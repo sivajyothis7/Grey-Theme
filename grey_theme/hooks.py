@@ -20,6 +20,9 @@ web_include_css = [
     "/assets/grey_theme/css/dv-login.css?ver=" + app_version
 ]
 # web_include_js = "/assets/grey_theme/js/grey_theme.js"
+doctype_js = {
+    "Sales Order": "public/js/test.js"
+}
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "grey_theme/public/scss/website"

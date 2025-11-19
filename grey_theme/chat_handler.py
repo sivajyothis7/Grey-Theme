@@ -2,6 +2,10 @@ import frappe
 import requests
 import json
 import re
+import uuid
+from frappe.utils.xlsxutils import make_xlsx   
+from frappe.utils import get_url               
+
 
 @frappe.whitelist()
 def handle_ai_query(question):
@@ -23,18 +27,8 @@ def handle_ai_query(question):
         return ask_general_ai(question)
 
 
-import re
-import frappe
 
 def create_item_from_command(command):
-    """
-    Parses item creation command with optional fields.
-    Examples:
-      - Create an item named Laptop
-      - Create an item named Laptop, item code LAP123
-      - Create an item named Laptop with item group Electronics
-      - Create an item named Laptop, stock UOM Nos
-    """
 
     name_match = re.search(r'named\s+([\w\s]+?)(?:\s+with|,|$)', command, re.IGNORECASE)
     if not name_match:
@@ -42,7 +36,7 @@ def create_item_from_command(command):
     item_name = name_match.group(1).strip()
 
     code_match = re.search(r'item code\s+([\w\s]+?)(?:,|\s+and|$)', command, re.IGNORECASE)
-    item_code = code_match.group(1).strip() if code_match else item_name  # default to item_name
+    item_code = code_match.group(1).strip() if code_match else item_name
 
     if frappe.db.exists("Item", item_code):
         return f"<b>⚠️ Item '{item_code}' already exists.</b>"
@@ -80,10 +74,13 @@ def create_item_from_command(command):
     
     return msg
 
+
+
 def create_customer_from_command(command):
+
     name_match = re.search(r'named\s+([\w\s]+?)(?:\s+with|$)', command, re.IGNORECASE)
     if not name_match:
-        return "<b>⚠️ Customer name not found. Please specify a name using 'named &lt;Customer Name&gt;'.</b>"
+        return "<b>⚠️ Customer name not found.</b>"
 
     customer_name = name_match.group(1).strip()
 
@@ -131,12 +128,23 @@ def get_top_overdue_customers():
     """, as_dict=True)
 
     if not data:
-        return "<b>No overdue customers found.</b>"
+        return {
+            "status": "empty",
+            "message": "No overdue customers found."
+        }
 
-    msg = "<b>Top 10 Customers with Overdue Invoices</b><br><br>"
-    for row in data:
-        msg += f"• {row.customer}: ₹{row.total_overdue:,.2f}<br>"
-    return msg
+    columns = ["Customer", "Total Overdue"]
+    rows = [[row.customer, float(row.total_overdue)] for row in data]
+
+    excel_url = export_to_excel(data, filename_prefix="Top_Overdue_Customers")
+
+    return {
+        "status": "success",
+        "columns": columns,
+        "rows": rows,
+        "excel_url": excel_url
+    }
+
 
 def get_top_unpaid_customers():
     data = frappe.db.sql("""
@@ -156,6 +164,7 @@ def get_top_unpaid_customers():
         msg += f"• {row.customer}: ₹{row.total_overdue:,.2f}<br>"
     return msg
 
+
 def get_top_customers_by_sales():
     data = frappe.db.sql("""
         SELECT customer, SUM(base_grand_total) AS total_sales
@@ -173,6 +182,7 @@ def get_top_customers_by_sales():
     for row in data:
         msg += f"• {row.customer}: ₹{row.total_sales:,.2f}<br>"
     return msg
+
 
 
 def get_top_items_by_sales():
@@ -194,6 +204,7 @@ def get_top_items_by_sales():
     return msg
 
 
+
 def get_stock_items_per_warehouse():
     data = frappe.db.sql("""
         SELECT warehouse, SUM(actual_qty) AS total_qty
@@ -213,46 +224,105 @@ def get_stock_items_per_warehouse():
     return msg
 
 
+
+def clean_sql_from_llm(text):
+    block = re.findall(r"```sql\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE)
+    if block:
+        sql = block[0]
+    else:
+        m = re.search(r"(select[\s\S]*)", text, flags=re.IGNORECASE)
+        sql = m.group(1) if m else text
+
+    sql = re.sub(r"```+", "", sql)
+    sql = sql.strip().rstrip(";")
+
+    if not sql.lower().startswith("select"):
+        m = re.search(r"(select[\s\S]*)", sql, flags=re.IGNORECASE)
+        if m:
+            sql = m.group(1).strip()
+
+    return sql.strip()
+
+
+
+def export_to_excel(data, filename_prefix="Query_Result"):
+    if not data:
+        return None
+
+    columns = list(data[0].keys())
+    rows = [[row.get(col) for col in columns] for row in data]
+    sheet = [columns] + rows
+
+    file_id = str(uuid.uuid4())
+    filename = f"{filename_prefix}_{file_id}.xlsx"
+    filepath = frappe.get_site_path("public", "files", filename)
+
+    xlsx = make_xlsx(sheet, "Data")
+
+    with open(filepath, "wb") as f:
+        f.write(xlsx.getvalue())
+
+    return get_url(f"/files/{filename}")
+
+
+
 @frappe.whitelist()
 def ask_general_ai(question):
     settings = frappe.get_single("AI Settings")
-    provider = (settings.default_provider or "Groq").strip().lower()
 
-    if provider == "groq":
-        api_key = (settings.groq_api_key or "").strip()
-        url = "https://api.groq.com/openai/v1/chat/completions"
-        model = "meta-llama/llama-4-scout-17b-16e-instruct"
-    elif provider == "deepseek":
-        api_key = (settings.deepseek_api_key or "").strip()
-        url = "https://api.deepseek.com/chat/completions"
-        model = "deepseek-chat"
-    else:
-        return "<b>⚠️ Unknown provider in AI Settings. Please choose Groq or DeepSeek.</b>"
+    api_key = (settings.groq_api_key or "").strip()
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    model = "meta-llama/llama-4-scout-17b-16e-instruct"
 
     if not api_key:
-        return f"<b>⚠️ API key missing for {provider.title()}.</b>"
+        return "<b>⚠️ Missing Groq API key.</b>"
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
+    prompt = f"""
+You are an ERPNext SQL generator.
+Convert this natural language question into a SAFE MariaDB SELECT query.
+
+Rules:
+- ONLY output SQL.
+- No explanation.
+- Use ERPNext tables only.
+- SELECT queries ONLY.
+
+User question:
+{question}
+"""
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
     payload = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": "You are an ERPNext assistant. Do NOT mention ERPNext in responses."},
-            {"role": "user", "content": question}
-        ],
-        "max_tokens": 500
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 300
     }
 
+    resp = requests.post(url, headers=headers, data=json.dumps(payload))
+    if resp.status_code != 200:
+        return f"<b>LLM API Error:</b> {resp.text}"
+
+    llm_sql = resp.json()["choices"][0]["message"]["content"]
+
+    sql = clean_sql_from_llm(llm_sql)
+
     try:
-        resp = requests.post(url, headers=headers, data=json.dumps(payload))
-        if resp.status_code == 200:
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"]
-            return f"<b>Fateh AI Response:</b><br><br>{content.replace(chr(10), '<br>')}"
-        else:
-            return f"<b>❌ API Error ({provider.title()}):</b> {resp.text}"
+        data = frappe.db.sql(sql, as_dict=True)
+        if not data:
+            return {"status": "empty"}
+
+        columns = list(data[0].keys())
+        rows = [list(row.values()) for row in data]
+
+        excel_url = export_to_excel(data)
+
+        return {
+            "status": "success",
+            "columns": columns,
+            "rows": rows,
+            "excel_url": excel_url
+        }
+
     except Exception as e:
-        return f"<b>⚠️ Error connecting to {provider.title()} API:</b> {str(e)}"
+        return {"status": "error", "error": str(e)}
