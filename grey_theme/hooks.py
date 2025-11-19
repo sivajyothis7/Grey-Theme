@@ -13,6 +13,7 @@ app_license = "mit"
 # include js, css files in header of desk.html
 app_include_css = "/assets/grey_theme/css/theme.css"
 # app_include_js = "/assets/grey_theme/js/grey_theme.js"
+app_include_js = ["/assets/grey_theme/js/suspension_check.js"]
 
 # include js, css files in header of web template
 web_include_css = [
@@ -128,17 +129,16 @@ doctype_js = {
 # Document Events
 # ---------------
 # Hook on document methods and events
-
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"Site Suspension Settings": {
+		"on_update": "grey_theme.suspension_api.broadcast_status_change"
+	}
+}
 
 # Scheduled Tasks
 # ---------------
+
+scheduler_events = {"cron": {"0 5 * * *": ["grey_theme.backup_check.check_gdrive_backup"]}}
 
 # scheduler_events = {
 # 	"all": [
@@ -188,8 +188,8 @@ doctype_js = {
 
 # Request Events
 # ----------------
-# before_request = ["grey_theme.utils.before_request"]
-# after_request = ["grey_theme.utils.after_request"]
+before_request = ["grey_theme.suspension_api.check_suspension"]
+after_request = ["grey_theme.suspension_api.force_redirect_after_request"]
 
 # Job Events
 # ----------
