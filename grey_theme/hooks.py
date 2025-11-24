@@ -24,7 +24,9 @@ web_include_css = [
 doctype_js = {
     "Sales Order": "public/js/test.js"
 }
-
+doctype_js = {
+    "Sales Invoice": "public/js/customer_price_history.js"
+}
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "grey_theme/public/scss/website"
 
