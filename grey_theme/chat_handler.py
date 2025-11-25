@@ -39,12 +39,12 @@ def handle_ai_query(question):
 def create_item_from_command(command):
     name_match = re.search(r'named\s+([\w\s]+?)(?:\s+with|,|$)', command, re.IGNORECASE)
     if not name_match:
-        return "<b>⚠️ Item name not found. Please specify a name using 'named <Item Name>'.</b>"
+        return "⚠️ Item name not found. Please specify a name using 'named <Item Name>'."
     item_name = name_match.group(1).strip()
     code_match = re.search(r'item code\s+([\w\s]+?)(?:,|\s+and|$)', command, re.IGNORECASE)
     item_code = code_match.group(1).strip() if code_match else item_name
     if frappe.db.exists("Item", item_code):
-        return f"<b>⚠️ Item '{item_code}' already exists.</b>"
+        return f"⚠️ Item '{item_code}' already exists."
     group_match = re.search(r'item group\s+([\w\s]+?)(?:,|\s+and|$)', command, re.IGNORECASE)
     item_group = group_match.group(1).strip() if group_match else None
     uom_match = re.search(r'stock uom\s+([\w\s]+?)(?:,|\s+and|$)', command, re.IGNORECASE)
@@ -58,7 +58,7 @@ def create_item_from_command(command):
     item.insert(ignore_permissions=True)
     frappe.db.commit()
 
-    msg = f"<b>✅ Item '{item_name}' created successfully.</b>"
+    msg = f"✅ Item '{item_name}' created successfully."
     if item_code != item_name: msg += f" Item Code: {item_code}."
     if item_group: msg += f" Item Group: {item_group}."
     if stock_uom: msg += f" Stock UOM: {stock_uom}."
@@ -74,7 +74,7 @@ def create_customer_from_command(command):
     tax_match = re.search(r'tax\s*id\s+([\w\d]+)', command, re.IGNORECASE)
     tax_id = tax_match.group(1).strip() if tax_match else None
     if frappe.db.exists("Customer", customer_name):
-        return f"<b>⚠️ Customer '{customer_name}' already exists.</b>"
+        return f"⚠️ Customer '{customer_name}' already exists."
 
     customer_data = {"doctype": "Customer", "customer_name": customer_name, "customer_type": "Company"}
     if territory: customer_data["territory"] = territory
@@ -84,7 +84,7 @@ def create_customer_from_command(command):
     customer.insert(ignore_permissions=True)
     frappe.db.commit()
 
-    msg = f"<b>✅ Customer '{customer_name}' created successfully.</b>"
+    msg = f"✅ Customer '{customer_name}' created successfully."
     if territory: msg += f" Territory: {territory}."
     if tax_id: msg += f" Tax ID: {tax_id}."
     return msg
