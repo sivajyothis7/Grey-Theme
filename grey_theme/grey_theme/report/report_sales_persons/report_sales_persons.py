@@ -35,7 +35,7 @@ def execute(filters=None):
     job_record_list = frappe.get_all(
         'Job Record',
         filters=job_filters,
-        fields=['name', 'sales_person', 'job_id']
+        fields=['name', 'sales_person', 'customer']
     )
 
     overall_credit_total = 0
@@ -48,7 +48,7 @@ def execute(filters=None):
     for job in job_record_list:
         total_credit = 0
         total_debit = 0
-        customer = job.job_id
+        customer = job.customer
         sales_invoices_list = []
 
         # ✅ SALES INVOICE
