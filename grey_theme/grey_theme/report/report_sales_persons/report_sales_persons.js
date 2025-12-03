@@ -5,10 +5,10 @@
 frappe.query_reports["Report-Sales Persons"] = {
     "filters": [
         {
-            "fieldname": "job_records",
-            "label": __("Job Records"),
+            "fieldname": "job_record",
+            "label": __("Job Record"),
             "fieldtype": "Link",
-            "options": "Job Records",
+            "options": "Job Record",
             "reqd": 0,
             "default": "",
             "width": "80"
