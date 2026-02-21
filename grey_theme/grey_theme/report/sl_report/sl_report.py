@@ -1,0 +1,150 @@
+# Copyright (c) 2026, siva and contributors
+# For license information, please see license.txt
+
+import frappe
+from frappe import _
+
+
+def execute(filters=None):
+    columns = get_columns()
+    data = get_data(filters)
+    return columns, data
+
+
+def get_columns():
+    return [
+        {
+            "label": _("Posting Date"),
+            "fieldname": "posting_date",
+            "fieldtype": "Date",
+            "width": 110,
+        },
+        {
+            "label": _("Supplier"),
+            "fieldname": "supplier",
+            "fieldtype": "Link",
+            "options": "Supplier",
+            "width": 160,
+        },
+        {
+            "label": _("Purchase Invoice"),
+            "fieldname": "purchase_invoice",
+            "fieldtype": "Link",
+            "options": "Purchase Invoice",
+            "width": 190,
+        },
+        {
+            "label": _("Purchase Invoice Amount"),
+            "fieldname": "grand_total",
+            "fieldtype": "Currency",
+            "width": 180,
+        },
+        {
+            "label": _("Payments"),
+            "fieldname": "paid_amount",
+            "fieldtype": "Currency",
+            "width": 140,
+        },
+        {
+            "label": _("Outstanding"),
+            "fieldname": "outstanding",
+            "fieldtype": "Currency",
+            "width": 150,
+        },
+        {
+            "label": _("Running Total"),
+            "fieldname": "running_total",
+            "fieldtype": "Currency",
+            "width": 160,
+        },
+        {
+            "label": _("Age (Days)"),
+            "fieldname": "age_days",
+            "fieldtype": "Int",
+            "width": 110,
+        },
+    ]
+
+
+def get_data(filters):
+    conditions = get_conditions(filters)
+
+    rows = frappe.db.sql(
+        """
+        SELECT
+            pi.posting_date,
+            pi.supplier,
+            pi.name                                             AS purchase_invoice,
+            pi.grand_total,
+            IFNULL(pe.paid_amount, 0)                          AS paid_amount,
+            (pi.grand_total - IFNULL(pe.paid_amount, 0))       AS outstanding,
+            DATEDIFF(CURDATE(), pi.posting_date)               AS age_days
+        FROM
+            `tabPurchase Invoice` pi
+        LEFT JOIN (
+            SELECT
+                per.reference_name,
+                SUM(per.allocated_amount) AS paid_amount
+            FROM
+                `tabPayment Entry Reference` per
+            INNER JOIN `tabPayment Entry` pe
+                ON pe.name = per.parent
+            WHERE
+                pe.docstatus = 1
+            GROUP BY
+                per.reference_name
+        ) pe ON pe.reference_name = pi.name
+        WHERE
+            pi.docstatus = 1
+            AND pi.is_return = 0
+            {conditions}
+        ORDER BY
+            pi.supplier,
+            pi.posting_date,
+            pi.creation
+        """.format(conditions=conditions),
+        filters,
+        as_dict=True,
+    )
+
+    # Calculate running total per supplier
+    running_totals = {}
+    for row in rows:
+        supplier = row["supplier"]
+        running_totals.setdefault(supplier, 0.0)
+        running_totals[supplier] += row["outstanding"]
+        row["running_total"] = running_totals[supplier]
+        row["is_total_row"] = 0
+        if row["outstanding"] <= 0:
+            row["age_days"] = 0
+
+    # Totals row
+    if rows:
+        totals_row = {
+            "posting_date":     None,
+            "supplier":         _("Total"),
+            "purchase_invoice": None,
+            "grand_total":      sum(r["grand_total"]   for r in rows),
+            "paid_amount":      sum(r["paid_amount"]   for r in rows),
+            "outstanding":      sum(r["outstanding"]   for r in rows),
+            "running_total":    sum(r["running_total"] for r in rows),
+            "age_days":         sum(r["age_days"]      for r in rows),
+            "is_total_row":     1,
+        }
+        rows.append(totals_row)
+
+    return rows
+
+
+def get_conditions(filters):
+    conditions = ""
+    if not filters:
+        return conditions
+
+    if filters.get("supplier"):
+        conditions += " AND pi.supplier = %(supplier)s"
+
+    if filters.get("company"):
+        conditions += " AND pi.company = %(company)s"
+
+    return conditions
