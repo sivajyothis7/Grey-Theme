@@ -1,5 +1,3 @@
-# Copyright (c) 2026, siva and contributors
-# For license information, please see license.txt
 
 import frappe
 from frappe import _
@@ -107,6 +105,46 @@ def get_data(filters):
         as_dict=True,
     )
 
+    supplier_info = {}
+    supplier_names = list(set(r["supplier"] for r in rows))
+    for supplier in supplier_names:
+        
+        supp = frappe.db.get_value(
+            "Supplier",
+            supplier,
+            ["custom_vat_registration_number", "supplier_primary_address"],
+            as_dict=True
+        ) or {}
+
+        vat_number = supp.get("custom_vat_registration_number") or ""
+        address_str = ""
+
+        primary_address_name = supp.get("supplier_primary_address")
+        if primary_address_name:
+            addr = frappe.db.get_value(
+                "Address",
+                primary_address_name,
+                ["address_line1", "address_line2", "city", "state", "pincode", "country"],
+                as_dict=True
+            ) or {}
+            addr_parts = []
+            for part in [
+                addr.get("address_line1"),
+                addr.get("address_line2"),
+                addr.get("city"),
+                addr.get("state"),
+                addr.get("pincode"),
+                addr.get("country"),
+            ]:
+                if part:
+                    addr_parts.append(part)
+            address_str = ", ".join(addr_parts)
+
+        supplier_info[supplier] = {
+            "custom_vat_registration_number": vat_number,
+            "address": address_str,
+        }
+
     # Calculate running total per supplier
     running_totals = {}
     for row in rows:
@@ -115,21 +153,25 @@ def get_data(filters):
         running_totals[supplier] += row["outstanding"]
         row["running_total"] = running_totals[supplier]
         row["is_total_row"] = 0
+        row["custom_vat_registration_number"] = supplier_info.get(supplier, {}).get("custom_vat_registration_number", "")
+        row["address"] = supplier_info.get(supplier, {}).get("address", "")
         if row["outstanding"] <= 0:
             row["age_days"] = 0
 
     # Totals row
     if rows:
         totals_row = {
-            "posting_date":     None,
-            "supplier":         _("Total"),
-            "purchase_invoice": None,
-            "grand_total":      sum(r["grand_total"]   for r in rows),
-            "paid_amount":      sum(r["paid_amount"]   for r in rows),
-            "outstanding":      sum(r["outstanding"]   for r in rows),
-            "running_total":    sum(r["running_total"] for r in rows),
-            "age_days":         sum(r["age_days"]      for r in rows),
-            "is_total_row":     1,
+            "posting_date":                    None,
+            "supplier":                        _("Total"),
+            "purchase_invoice":                None,
+            "grand_total":                     sum(r["grand_total"]   for r in rows),
+            "paid_amount":                     sum(r["paid_amount"]   for r in rows),
+            "outstanding":                     sum(r["outstanding"]   for r in rows),
+            "running_total":                   sum(r["running_total"] for r in rows),
+            "age_days":                        sum(r["age_days"]      for r in rows),
+            "is_total_row":                    1,
+            "custom_vat_registration_number":  "",
+            "address":                         "",
         }
         rows.append(totals_row)
 
@@ -146,5 +188,14 @@ def get_conditions(filters):
 
     if filters.get("company"):
         conditions += " AND pi.company = %(company)s"
+
+    if filters.get("cost_center"):
+        conditions += " AND pi.cost_center = %(cost_center)s"
+
+    if filters.get("from_date"):
+        conditions += " AND pi.posting_date >= %(from_date)s"
+
+    if filters.get("to_date"):
+        conditions += " AND pi.posting_date <= %(to_date)s"
 
     return conditions

@@ -15,6 +15,22 @@ frappe.query_reports["SL Report"] = {
             fieldtype: "Link",
             options: "Company",
         },
+        {
+            fieldname: "cost_center",
+            label: __("Cost Center"),
+            fieldtype: "Link",
+            options: "Cost Center",
+        },
+        {
+            fieldname: "from_date",
+            label: __("From Date"),
+            fieldtype: "Date",
+        },
+        {
+            fieldname: "to_date",
+            label: __("To Date"),
+            fieldtype: "Date",
+        },
     ],
 
     formatter: function (value, row, column, data, default_formatter) {

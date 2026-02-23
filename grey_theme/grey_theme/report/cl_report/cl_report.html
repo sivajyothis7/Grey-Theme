@@ -1,0 +1,144 @@
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Customer Ledger Report</title>
+    <style>
+        @page { size: A4 landscape; margin: 20px; }
+        body { font-family: Arial, sans-serif; font-size: 9pt; margin: 0; }
+        .title { text-align: center; font-size: 14pt; font-weight: bold; margin: 20px 0 5px; }
+        .period { text-align: center; font-size: 10pt; margin-bottom: 15px; }
+        .to-box { padding: 5px 0; margin-bottom: 6px; }
+        .to-box strong { font-size: 10pt; display: block; margin-bottom: 3px; }
+        .to-box span { display: block; font-size: 9pt; color: #333; line-height: 1.5; }
+        p { margin: 6px 0; font-size: 9pt; }
+        table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-top: 10px; }
+        th, td { border: 0.5px solid #000; padding: 2px 3px; text-align: center; line-height: 1.1; }
+        th { font-weight: bold; color: #000; background-color: #f0f0f0; }
+        .text-right { text-align: right; }
+        .text-left { text-align: left; }
+        .cust-group td { background-color: #e8edf2; font-weight: bold; text-align: left; }
+        .total-row td { background-color: #1e293b; color: #fff; font-weight: bold; }
+        .overdue { color: #dc2626; font-weight: bold; }
+        .settled { color: #16a34a; }
+        .footer-note { margin-top: 20px; font-size: 8pt; color: #555; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div class="title">CUSTOMER LEDGER REPORT</div>
+
+    <div class="period">
+        {% if (filters.from_date && filters.to_date) { %}
+            {%= frappe.datetime.str_to_user(filters.from_date) %} TO {%= frappe.datetime.str_to_user(filters.to_date) %}
+        {% } else if (filters.from_date) { %}
+            From {%= frappe.datetime.str_to_user(filters.from_date) %}
+        {% } else if (filters.to_date) { %}
+            Up to {%= frappe.datetime.str_to_user(filters.to_date) %}
+        {% } else { %}
+            As of {%= frappe.datetime.str_to_user(frappe.datetime.get_today()) %}
+        {% } %}
+    </div>
+
+    <!-- Letter Head -->
+    <div class="to-box">
+        <strong>To</strong>
+        {% if (filters.customer) { %}
+            <strong>{%= filters.customer %}</strong>
+            {% if (data[0] && data[0].address) { %}
+                <span>{%= data[0].address %}</span>
+            {% } %}
+            {% if (data[0] && data[0].custom_vat_registration_number) { %}
+                <span><b>Tax ID:</b> {%= data[0].custom_vat_registration_number %}</span>
+            {% } %}
+        {% } else { %}
+            <strong>All Customers</strong>
+        {% } %}
+    </div>
+
+    
+
+    {% if (filters.company) { %}
+    <p style="margin-top:8px;">
+        <strong>Company:</strong> {%= filters.company %}
+        {% if (filters.cost_center) { %}
+            &nbsp;|&nbsp; <strong>Cost Center:</strong> {%= filters.cost_center %}
+        {% } %}
+    </p>
+    {% } %}
+
+    <table>
+        <thead>
+            <tr>
+                <th style="color:#000;">Date</th>
+                <th style="color:#000;" class="text-left">Customer</th>
+                <th style="color:#000;">Sales Invoice</th>
+                <th style="color:#000;" class="text-right">Invoice Amount</th>
+                <th style="color:#000;" class="text-right">Payments</th>
+                <th style="color:#000;" class="text-right">Outstanding</th>
+                <th style="color:#000;" class="text-right">Running Total</th>
+                <th style="color:#000;" class="text-right">Age (Days)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% var prev_customer = null; %}
+            {% for (var i = 0; i < data.length; i++) { %}
+                {% if (!data[i].is_total_row) { %}
+
+                    {% if (data[i].customer !== prev_customer) { %}
+                        {% prev_customer = data[i].customer; %}
+                        <tr class="cust-group">
+                            <td colspan="8">
+                                {%= data[i].customer || "" %}
+                                
+                            </td>
+                        </tr>
+                    {% } %}
+
+                    <tr>
+                        <td>{%= data[i].posting_date ? frappe.datetime.str_to_user(data[i].posting_date) : "-" %}</td>
+                        <td class="text-left">{%= data[i].customer || "" %}</td>
+                        <td>{%= data[i].sales_invoice || "-" %}</td>
+                        <td class="text-right">{%= format_currency(data[i].grand_total) %}</td>
+                        <td class="text-right">{%= format_currency(data[i].paid_amount) %}</td>
+                        {% if (data[i].outstanding > 0) { %}
+                        <td class="text-right overdue">{%= format_currency(data[i].outstanding) %}</td>
+                        {% } else { %}
+                        <td class="text-right settled">{%= format_currency(data[i].outstanding) %}</td>
+                        {% } %}
+                        <td class="text-right">{%= format_currency(data[i].running_total) %}</td>
+                        {% if (data[i].age_days && data[i].age_days > 30) { %}
+                        <td class="text-right overdue">{%= data[i].age_days %}</td>
+                        {% } else { %}
+                        <td class="text-right">{%= data[i].age_days || "-" %}</td>
+                        {% } %}
+                    </tr>
+
+                {% } %}
+            {% } %}
+        </tbody>
+        <tfoot>
+            {% for (var j = 0; j < data.length; j++) { %}
+                {% if (data[j].is_total_row) { %}
+                <tr class="total-row">
+                    <td colspan="3" class="text-left">GRAND TOTAL</td>
+                    <td class="text-right">{%= format_currency(data[j].grand_total) %}</td>
+                    <td class="text-right">{%= format_currency(data[j].paid_amount) %}</td>
+                    <td class="text-right">{%= format_currency(data[j].outstanding) %}</td>
+                    <td class="text-right">{%= format_currency(data[j].running_total) %}</td>
+                    <td class="text-right">-</td>
+                </tr>
+                {% } %}
+            {% } %}
+        </tfoot>
+    </table>
+
+    <div class="footer-note">
+        Generated on {%= frappe.datetime.str_to_user(frappe.datetime.get_today()) %}
+        {% if (filters.company) { %} &nbsp;·&nbsp; {%= filters.company %} {% } %}
+    </div>
+
+</body>
+</html>
