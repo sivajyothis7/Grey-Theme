@@ -112,11 +112,11 @@ def get_data(filters):
         supp = frappe.db.get_value(
             "Supplier",
             supplier,
-            ["custom_vat_registration_number", "supplier_primary_address"],
+            ["tax_id", "supplier_primary_address"],
             as_dict=True
         ) or {}
 
-        vat_number = supp.get("custom_vat_registration_number") or ""
+        vat_number = supp.get("tax_id") or ""
         address_str = ""
 
         primary_address_name = supp.get("supplier_primary_address")
@@ -141,7 +141,7 @@ def get_data(filters):
             address_str = ", ".join(addr_parts)
 
         supplier_info[supplier] = {
-            "custom_vat_registration_number": vat_number,
+            "tax_id": vat_number,
             "address": address_str,
         }
 
@@ -153,7 +153,7 @@ def get_data(filters):
         running_totals[supplier] += row["outstanding"]
         row["running_total"] = running_totals[supplier]
         row["is_total_row"] = 0
-        row["custom_vat_registration_number"] = supplier_info.get(supplier, {}).get("custom_vat_registration_number", "")
+        row["tax_id"] = supplier_info.get(supplier, {}).get("tax_id", "")
         row["address"] = supplier_info.get(supplier, {}).get("address", "")
         if row["outstanding"] <= 0:
             row["age_days"] = 0
@@ -170,7 +170,7 @@ def get_data(filters):
             "running_total":                   sum(r["running_total"] for r in rows),
             "age_days":                        sum(r["age_days"]      for r in rows),
             "is_total_row":                    1,
-            "custom_vat_registration_number":  "",
+            "tax_id":  "",
             "address":                         "",
         }
         rows.append(totals_row)

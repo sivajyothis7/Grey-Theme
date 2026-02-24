@@ -50,8 +50,8 @@
             {% if (data[0] && data[0].address) { %}
                 <span>{%= data[0].address %}</span>
             {% } %}
-            {% if (data[0] && data[0].custom_vat_registration_number) { %}
-                <span><b>Tax ID:</b> {%= data[0].custom_vat_registration_number %}</span>
+            {% if (data[0] && data[0].tax_id) { %}
+                <span><b>Tax ID:</b> {%= data[0].tax_id %}</span>
             {% } %}
         {% } else { %}
             <strong>All Suppliers</strong>
