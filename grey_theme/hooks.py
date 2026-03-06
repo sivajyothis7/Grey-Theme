@@ -140,7 +140,14 @@ doc_events = {
 # Scheduled Tasks
 # ---------------
 
-scheduler_events = {"cron": {"0 5 * * *": ["grey_theme.backup_check.check_gdrive_backup"]}}
+scheduler_events = {
+	"cron": {
+		"0 5 * * *": ["grey_theme.backup_check.check_gdrive_backup"],
+	},
+	"hourly": [
+		"grey_theme.tasks.check_auto_suspend_date",
+	],
+}
 
 # scheduler_events = {
 # 	"all": [

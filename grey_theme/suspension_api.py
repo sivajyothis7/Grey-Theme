@@ -1,5 +1,6 @@
 import frappe
 from frappe import _
+from datetime import date
 
 def check_suspension():
 	"""Check if site is suspended — only after login"""
@@ -19,6 +20,8 @@ def check_suspension():
 		return
 	try:
 		settings = frappe.get_single("Site Suspension Settings")
+		# Check if auto suspend date has been reached
+		_check_and_apply_auto_suspend(settings)
 		if settings.is_suspended:
 			request_path = frappe.request.path or ""
 			if not request_path.startswith("/suspended"):
@@ -49,6 +52,35 @@ def force_redirect_after_request(response):
 		pass
 	return response
 
+def _check_and_apply_auto_suspend(settings):
+	"""Suspend automatically when auto_suspend_date is reached."""
+	try:
+		# If site is already suspended, skip
+		if settings.is_suspended:
+			return
+
+		# Check if auto_suspend_date is set
+		if not getattr(settings, "auto_suspend_date", None):
+			return
+
+		today = date.today()
+
+		# Convert auto_suspend_date to date object if it's a string
+		suspend_date = settings.auto_suspend_date
+		if isinstance(suspend_date, str):
+			from datetime import datetime
+			suspend_date = datetime.strptime(suspend_date, "%Y-%m-%d").date()
+		elif hasattr(suspend_date, "date"):
+			suspend_date = suspend_date.date()
+
+		if today >= suspend_date:
+			settings.is_suspended = 1
+			settings.save(ignore_permissions=True)
+			frappe.db.commit()
+	except Exception:
+		# Don't break the request flow if there's an error
+		pass
+
 def broadcast_status_change(doc, method=None):
 	"""Broadcast suspension status change to all sessions."""
 	try:
@@ -71,6 +103,11 @@ def toggle_suspension(suspend=True, reason=None):
 	settings.is_suspended = int(suspend)
 	if suspend and reason:
 		settings.suspension_reason = reason
+
+	# Clear auto_suspend_date when activating the site
+	if not int(suspend):
+		settings.auto_suspend_date = None
+
 	settings.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {

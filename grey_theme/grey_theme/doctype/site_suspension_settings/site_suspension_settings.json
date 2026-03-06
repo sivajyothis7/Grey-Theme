@@ -6,7 +6,8 @@
  "field_order": [
   "is_suspended",
   "suspension_reason",
-  "whatsapp_number"
+  "whatsapp_number",
+  "auto_suspend_date"
  ],
  "fields": [
   {
@@ -25,6 +26,11 @@
    "fieldname": "is_suspended",
    "fieldtype": "Check",
    "label": "Site is Suspended"
+  },
+  {
+   "fieldname": "auto_suspend_date",
+   "fieldtype": "Date",
+   "label": "Auto Suspend Date"
   }
  ],
  "grid_page_length": 50,
