@@ -73,9 +73,18 @@ def get_data(filters):
             si.posting_date,
             si.customer,
             si.name                                             AS sales_invoice,
-            si.grand_total,
+            CASE
+                WHEN si.is_return = 1 THEN -si.grand_total
+                ELSE si.grand_total
+            END AS grand_total,
             IFNULL(pe.paid_amount, 0)                          AS paid_amount,
-            (si.grand_total - IFNULL(pe.paid_amount, 0))       AS outstanding,
+            (
+                CASE
+                    WHEN si.is_return = 1 THEN -si.grand_total
+                    ELSE si.grand_total
+                END
+                - IFNULL(pe.paid_amount, 0)
+            ) AS outstanding,
             DATEDIFF(CURDATE(), si.posting_date)               AS age_days
         FROM
             `tabSales Invoice` si
@@ -93,8 +102,7 @@ def get_data(filters):
                 per.reference_name
         ) pe ON pe.reference_name = si.name
         WHERE
-            si.docstatus = 1
-            AND si.is_return = 0
+            si.docstatus = 1           
             {conditions}
         ORDER BY
             si.customer,
