@@ -73,9 +73,18 @@ def get_data(filters):
             pi.posting_date,
             pi.supplier,
             pi.name                                             AS purchase_invoice,
-            pi.grand_total,
+            CASE
+                WHEN pi.is_return = 1 THEN -pi.grand_total
+                ELSE pi.grand_total
+            END AS grand_total,
             IFNULL(pe.paid_amount, 0)                          AS paid_amount,
-            (pi.grand_total - IFNULL(pe.paid_amount, 0))       AS outstanding,
+            (
+                CASE
+                    WHEN pi.is_return = 1 THEN -pi.grand_total
+                    ELSE pi.grand_total
+                END
+                - IFNULL(pe.paid_amount, 0)
+            ) AS outstanding,
             DATEDIFF(CURDATE(), pi.posting_date)               AS age_days
         FROM
             `tabPurchase Invoice` pi
@@ -93,8 +102,7 @@ def get_data(filters):
                 per.reference_name
         ) pe ON pe.reference_name = pi.name
         WHERE
-            pi.docstatus = 1
-            AND pi.is_return = 0
+            pi.docstatus = 1           
             {conditions}
         ORDER BY
             pi.supplier,
