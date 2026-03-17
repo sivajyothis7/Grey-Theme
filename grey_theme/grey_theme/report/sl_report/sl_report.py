@@ -73,34 +73,12 @@ def get_data(filters):
             pi.posting_date,
             pi.supplier,
             pi.name                                             AS purchase_invoice,
-            CASE
-                WHEN pi.is_return = 1 THEN -pi.grand_total
-                ELSE pi.grand_total
-            END AS grand_total,
-            IFNULL(pe.paid_amount, 0)                          AS paid_amount,
-            (
-                CASE
-                    WHEN pi.is_return = 1 THEN -pi.grand_total
-                    ELSE pi.grand_total
-                END
-                - IFNULL(pe.paid_amount, 0)
-            ) AS outstanding,
+            pi.grand_total                                     AS grand_total,
+            pi.outstanding_amount                              AS outstanding,
+            (pi.grand_total - pi.outstanding_amount)           AS paid_amount,
             DATEDIFF(CURDATE(), pi.posting_date)               AS age_days
         FROM
             `tabPurchase Invoice` pi
-        LEFT JOIN (
-            SELECT
-                per.reference_name,
-                SUM(per.allocated_amount) AS paid_amount
-            FROM
-                `tabPayment Entry Reference` per
-            INNER JOIN `tabPayment Entry` pe
-                ON pe.name = per.parent
-            WHERE
-                pe.docstatus = 1
-            GROUP BY
-                per.reference_name
-        ) pe ON pe.reference_name = pi.name
         WHERE
             pi.docstatus = 1           
             {conditions}
@@ -168,6 +146,7 @@ def get_data(filters):
 
     # Totals row
     if rows:
+        last_running_total = rows[-1].get("running_total")
         totals_row = {
             "posting_date":                    None,
             "supplier":                        _("Total"),
@@ -175,10 +154,10 @@ def get_data(filters):
             "grand_total":                     sum(r["grand_total"]   for r in rows),
             "paid_amount":                     sum(r["paid_amount"]   for r in rows),
             "outstanding":                     sum(r["outstanding"]   for r in rows),
-            "running_total":                   sum(r["running_total"] for r in rows),
-            "age_days":                        sum(r["age_days"]      for r in rows),
+            "running_total":                   last_running_total,
+            "age_days":                        None,
             "is_total_row":                    1,
-            "tax_id":  "",
+            "tax_id":                          "",
             "address":                         "",
         }
         rows.append(totals_row)
@@ -189,7 +168,10 @@ def get_data(filters):
 def get_conditions(filters):
     conditions = ""
     if not filters:
-        return conditions
+        frappe.throw(_("Supplier is required to run this report."))
+
+    if not filters.get("supplier"):
+        frappe.throw(_("Supplier is required to run this report."))
 
     if filters.get("supplier"):
         conditions += " AND pi.supplier = %(supplier)s"

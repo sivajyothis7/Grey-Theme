@@ -8,6 +8,7 @@ frappe.query_reports["SL Report"] = {
             label: __("Supplier"),
             fieldtype: "Link",
             options: "Supplier",
+            reqd: 1,
         },
         {
             fieldname: "company",
