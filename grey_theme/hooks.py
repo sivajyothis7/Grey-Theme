@@ -134,9 +134,6 @@ web_include_css = [
 doc_events = {
 	"Site Suspension Settings": {
 		"on_update": "grey_theme.suspension_api.broadcast_status_change"
-	},
-    "*": {
-		"validate": "grey_theme.api.validate_item_uom",
 	}
 }
 
@@ -246,19 +243,3 @@ after_request = ["grey_theme.suspension_api.force_redirect_after_request"]
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
-fixtures = [
-    {
-        "dt": "Custom Field",
-        "filters": [
-            [
-                "name",
-                "in",
-                [ 
-                    # Stock Settings
-                    "Stock Settings - custom_enable_item_uom_validation"
-
-                ]
-            ]
-        ]
-    }
-]
