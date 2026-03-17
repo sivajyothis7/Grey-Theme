@@ -5,6 +5,7 @@ frappe.query_reports["CL Report"] = {
             label: __("Customer"),
             fieldtype: "Link",
             options: "Customer",
+            reqd: 1,
         },
         {
             fieldname: "company",
