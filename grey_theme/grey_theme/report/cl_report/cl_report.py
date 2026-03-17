@@ -67,6 +67,37 @@ def get_columns():
 def get_data(filters):
     conditions = get_conditions(filters)
 
+    opening_row = None
+    if filters and filters.get("from_date"):
+        opening_row = frappe.db.sql(
+            """
+            SELECT
+                NULL                                            AS posting_date,
+                si.customer                                     AS customer,
+                NULL                                            AS sales_invoice,
+                IFNULL(SUM(si.grand_total), 0)                  AS grand_total,
+                IFNULL(SUM(si.outstanding_amount), 0)           AS outstanding,
+                IFNULL(SUM(si.grand_total - si.outstanding_amount), 0) AS paid_amount,
+                NULL                                            AS age_days
+            FROM
+                `tabSales Invoice` si
+            WHERE
+                si.docstatus = 1
+                AND si.customer = %(customer)s
+                {company_condition}
+                {cost_center_condition}
+                AND si.posting_date < %(from_date)s
+            """.format(
+                company_condition=" AND si.company = %(company)s" if filters.get("company") else "",
+                cost_center_condition=" AND si.cost_center = %(cost_center)s" if filters.get("cost_center") else "",
+            ),
+            filters,
+            as_dict=True,
+        )[0]
+        opening_row["sales_invoice"] = _("Opening")
+        opening_row["is_opening_row"] = 1
+        opening_row["is_total_row"] = 0
+
     rows = frappe.db.sql(
         """
         SELECT
@@ -94,6 +125,9 @@ def get_data(filters):
     
     customer_info = {}
     customer_names = list(set(r["customer"] for r in rows))
+    if opening_row and opening_row.get("customer"):
+        customer_names.append(opening_row["customer"])
+        customer_names = list(set(customer_names))
     for customer in customer_names:
         cust = frappe.db.get_value(
             "Customer",
@@ -133,12 +167,24 @@ def get_data(filters):
 
     # Calculate running total per customer
     running_totals = {}
+    if opening_row:
+        customer = opening_row["customer"]
+        running_totals[customer] = float(opening_row.get("outstanding") or 0)
+        opening_row["running_total"] = running_totals[customer]
+        opening_row["custom_vat_registration_number"] = customer_info.get(customer, {}).get("custom_vat_registration_number", "")
+        opening_row["address"] = customer_info.get(customer, {}).get("address", "")
+        opening_row["age_days"] = None
+        rows = [opening_row] + rows
+
     for row in rows:
+        if row.get("is_opening_row"):
+            continue
         customer = row["customer"]
         running_totals.setdefault(customer, 0.0)
         running_totals[customer] += row["outstanding"]
         row["running_total"] = running_totals[customer]
         row["is_total_row"] = 0
+        row["is_opening_row"] = 0
         row["custom_vat_registration_number"] = customer_info.get(customer, {}).get("custom_vat_registration_number", "")
         row["address"] = customer_info.get(customer, {}).get("address", "")
         if row["outstanding"] <= 0:
@@ -157,6 +203,7 @@ def get_data(filters):
             "running_total":                  last_running_total,
             "age_days":                       None,
             "is_total_row":                   1,
+            "is_opening_row":                 0,
             "custom_vat_registration_number": "",
             "address":                        "",
         }
