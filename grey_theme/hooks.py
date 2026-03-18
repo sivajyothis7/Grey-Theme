@@ -79,6 +79,7 @@ web_include_css = [
 
 # before_install = "grey_theme.install.before_install"
 # after_install = "grey_theme.install.after_install"
+after_migrate = "grey_theme.api.create_custom_fields_for_selling_settings"
 
 # Uninstallation
 # ------------
@@ -134,6 +135,9 @@ web_include_css = [
 doc_events = {
 	"Site Suspension Settings": {
 		"on_update": "grey_theme.suspension_api.broadcast_status_change"
+	},
+    "*": {
+		"validate": "grey_theme.api.validate_item_uom",
 	}
 }
 
