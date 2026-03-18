@@ -4,7 +4,7 @@ import frappe
 
 def validate_item_uom(doc, method):
     settings = frappe.get_single("Stock Settings")
-    if not settings.custom_enable_item_uom_validation:
+    if not getattr(settings, "custom_enable_item_uom_validation", 0):
         return
     if not hasattr(doc, "items"):
         return
