@@ -20,7 +20,14 @@ frappe.query_reports["Customer Invoice Summary"] = {
             "label": "Warehouse",
             "fieldtype": "Link",
             "options": "Warehouse"
+        },
+        {
+            "fieldname": "customer",
+            "label": "Customer",
+            "fieldtype": "Link",
+            "options": "Customer"
         }
+        
 
 	]
 };

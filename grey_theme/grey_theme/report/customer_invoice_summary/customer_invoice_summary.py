@@ -12,6 +12,7 @@ def execute(filters=None):
             "invoice_amount": sum(d.get("invoice_amount") or 0 for d in data if d.get("customer")),
             "paid_amount": sum(d.get("paid_amount") or 0 for d in data if d.get("customer")),
             "outstanding_amount": sum(d.get("outstanding_amount") or 0 for d in data if d.get("customer")),
+            "return_amount":sum(d.get("return_amount") or 0 for d in data if d.get("customer")),
         }
         data.append(total_row)
 
@@ -24,15 +25,17 @@ def get_columns():
         {"label": "Invoiced Amount", "fieldname": "invoice_amount", "fieldtype": "Currency", "width": 250},
         {"label": "Paid Amount", "fieldname": "paid_amount", "fieldtype": "Currency", "width": 250},
         {"label": "Outstanding Amount", "fieldname": "outstanding_amount", "fieldtype": "Currency", "width": 250},
+        {"label": "Sales Return", "fieldname": "return_amount", "fieldtype": "Currency", "width": 200},
     ]
 
 
 def get_data(filters):
-    warehouse_filter = ""
+    conditions = "si.docstatus = 1 AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s AND si.is_return = 0"
     if filters.get("warehouse"):
-        warehouse_filter = " AND sii.warehouse = %(warehouse)s"
+        conditions += " AND sii.warehouse = %(warehouse)s"
+    if filters.get("customer"):
+        conditions += " AND si.customer = %(customer)s"
 
-    
     invoices = frappe.db.sql(f"""
         SELECT
             si.customer,
@@ -41,36 +44,34 @@ def get_data(filters):
             SUM(sii.amount * si.outstanding_amount / si.grand_total) AS outstanding_amount
         FROM `tabSales Invoice` si
         INNER JOIN `tabSales Invoice Item` sii ON si.name = sii.parent
-        WHERE si.docstatus = 1
-            AND si.is_return = 0
-            AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
-            {warehouse_filter}
+        WHERE {conditions}
         GROUP BY si.customer
     """, filters, as_dict=1)
 
-    
+    # Get returns separately
+    return_conditions = "si.docstatus = 1 AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s AND si.is_return = 1"
+    if filters.get("warehouse"):
+        return_conditions += " AND sii.warehouse = %(warehouse)s"
+    if filters.get("customer"):
+        return_conditions += " AND si.customer = %(customer)s"
+
     returns = frappe.db.sql(f"""
         SELECT
             si.customer,
             SUM(sii.amount) AS return_amount
         FROM `tabSales Invoice` si
         INNER JOIN `tabSales Invoice Item` sii ON si.name = sii.parent
-        WHERE si.docstatus = 1
-            AND si.is_return = 1
-            AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
-            {warehouse_filter}
+        WHERE {return_conditions}
         GROUP BY si.customer
     """, filters, as_dict=1)
-
-   
+  
     return_map = {r['customer']: r['return_amount'] for r in returns}
-
-   
+  
     for inv in invoices:
         customer = inv['customer']
-        return_amt = return_map.get(customer, 0)
-        inv['invoice_amount'] -= return_amt
-        inv['paid_amount'] -= return_amt
-        inv['outstanding_amount'] -= return_amt
+        inv['return_amount'] = return_map.get(customer, 0)       
+        inv['invoice_amount'] -= inv['return_amount']
+        inv['paid_amount'] -= inv['return_amount']
+        inv['outstanding_amount'] -= inv['return_amount']
 
     return invoices
