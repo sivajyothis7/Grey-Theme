@@ -1,4 +1,4 @@
-## Grey Theme
+## Grey Theme App
 
 Grey Theme
 
