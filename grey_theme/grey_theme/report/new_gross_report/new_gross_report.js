@@ -1,7 +1,7 @@
 // Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 // License: GNU General Public License v3. See license.txt
 
-frappe.query_reports["Gross Profit"] = {
+frappe.query_reports["New Gross Report"] = {
 	filters: [
 		{
 			fieldname: "company",
@@ -111,13 +111,13 @@ frappe.query_reports["Gross Profit"] = {
 		}
 		if (column.fieldname === "markup_percent" && data) {
 			if (data.markup_percent < 0) {
-				value = `<span style="color:red;font-weight:bold">${value}</span>`;
+				value = `<span style="font-weight:bold">${value}</span>`;
 			} else if (data.markup_percent > 0) {
-				value = `<span style="color:green">${value}</span>`;
+				value = `<span>${value}</span>`;
 			}
 		}
 		return value;
 	},
 };
 
-erpnext.utils.add_dimensions("Gross Profit", 15);
+erpnext.utils.add_dimensions("New Gross Report", 15);
