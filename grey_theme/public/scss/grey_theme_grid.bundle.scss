@@ -1,0 +1,247 @@
+// Copyright (c) 2026, Enfono Technologies and contributors
+// For license information, please see license.txt
+
+//
+// Grey Theme — Grid Enhancer stylesheet
+//
+// Every rule is nested under `body.grey-ui-grid`, which grid_enhancer.js only adds
+// when frappe.boot.grey_theme_ui.grid_enhancer is on — so this file is completely
+// inert on a site where the feature is disabled.
+//
+// The layout is NATIVE: `overflow-x: auto` on the scroll container, `width: max-content`
+// on each row, and `position: sticky` on pinned cells. Trackpad, shift+wheel, the native
+// scrollbar, keyboard scrolling and RTL therefore all work without any JS scroll handling.
+//
+// Colours come from Frappe's CSS variables only, so light and dark mode both work.
+//
+// `--grey-grid-min-col-width` is written onto :root by the JS from the
+// `grid_min_column_width` setting; the var() fallbacks below keep this file sane on
+// its own. It is deliberately NOT redeclared here — a declaration on `body` would
+// shadow the inherited :root value.
+//
+
+body.grey-ui-grid {
+	--grey-grid-check-width: 40px;
+	--grey-grid-index-width: 50px;
+	--grey-grid-action-width: 40px;
+	--grey-grid-sticky-shadow: var(--table-border-color);
+
+	.form-grid-container.grey-grid-scroll {
+		// beats frappe's `@media (min-width: md) { .form-grid-container { overflow-x: unset !important } }`
+		// on specificity, and its `@media (max-width: md) { overflow-x: clip }`.
+		// NB: `clip` would disable scrolling, so it is never used here.
+		overflow-x: auto !important;
+		overscroll-behavior-x: contain;
+		position: relative;
+
+		// the container is the stable box once the content scrolls, so the frame
+		// moves here from .form-grid (whose border would otherwise scroll into view)
+		border: 1px solid var(--table-border-color);
+		border-radius: var(--border-radius-md);
+
+		scrollbar-width: thin;
+
+		&::-webkit-scrollbar {
+			height: 8px;
+		}
+
+		&::-webkit-scrollbar-track {
+			background: transparent;
+		}
+
+		&::-webkit-scrollbar-thumb {
+			background-color: var(--gray-400);
+			border-radius: var(--border-radius-sm);
+		}
+
+		> .form-grid {
+			border: none !important;
+			border-radius: 0;
+			// frappe's mobile rules pin .form-grid to 738px and hand-scroll it by
+			// setting position:relative + style.left — neutralise both
+			min-width: 0 !important;
+			position: static !important;
+			left: auto !important;
+			right: auto !important;
+		}
+
+		// ------------------------------------------------------------ row shell
+
+		// zeroing the row padding (and the bootstrap .row gutter that cancels it out)
+		// makes x = 0 the true left edge of the scrollport, so `left: 0` on the first
+		// pinned cell lands exactly where the cell already sits at rest — no jump
+		.grid-row {
+			padding-left: 0;
+			padding-right: 0;
+			// the per-cell border below replaces this one, which stops at container width
+			border-bottom: none;
+		}
+
+		.grid-row-open .form-in-grid {
+			margin-left: 0;
+			margin-right: 0;
+		}
+
+		// The expanded row form lives in .grid-row, which stays container-width. Sticky
+		// alone cannot offset a box that already fills its containing block, so
+		// pin_open_row_forms() in ui/grid_enhancer.js also writes an explicit pixel
+		// width from the scrollport — these two work only as a pair.
+		.form-in-grid {
+			position: sticky;
+			left: 0;
+			right: auto;
+		}
+
+		[dir="rtl"] & .form-in-grid,
+		&[dir="rtl"] .form-in-grid {
+			left: auto;
+			right: 0;
+		}
+
+		.data-row.row {
+			flex-wrap: nowrap;
+			width: max-content;
+			min-width: 100%;
+			margin-left: 0;
+			margin-right: 0;
+			background-color: var(--modal-bg);
+		}
+
+		.data-row.row.highlight {
+			background-color: var(--yellow-highlight-color);
+		}
+
+		// ------------------------------------------------------------- cells
+
+		.data-row.row > .col {
+			flex: 0 0 auto;
+			max-width: none;
+		}
+
+		// row handle cells are always leftmost and always narrow
+		.data-row.row > .col.row-check {
+			flex: 0 0 auto;
+			width: var(--grey-grid-check-width);
+			min-width: var(--grey-grid-check-width);
+			max-width: var(--grey-grid-check-width);
+		}
+
+		.data-row.row > .col.row-index {
+			flex: 0 0 auto;
+			width: var(--grey-grid-index-width);
+			min-width: var(--grey-grid-index-width);
+			max-width: var(--grey-grid-index-width);
+		}
+
+		// the trailing utility cells carry no col-xs-N class: the open-row button on a
+		// data row, the configure-columns gear on the heading row and the filter row's
+		// trailing spacer. They must all be the SAME width or the three rows misalign.
+		.data-row.row > .col:not([class*="col-xs-"]):not(.row-check):not(.row-index) {
+			flex: 0 0 auto;
+			width: var(--grey-grid-action-width);
+			min-width: var(--grey-grid-action-width);
+			max-width: var(--grey-grid-action-width);
+		}
+
+		// col-xs-N -> a width derived from the configured minimum column width.
+		// This applies to data cells AND to `.grid-static-col.search` filter cells
+		// through the same selector, so the filter row can never drift out of
+		// alignment with the data rows (a live bug in the app this ports).
+		// It also overrides frappe's `.grid-row > .row .col:last-child { min-width: 0 }`.
+		// Upper bound must stay >= MAX_COLUMN_WIDTH in ui/grid_enhancer.js, which
+		// rejects any single column wider than that in Configure Columns. Upstream
+		// could never exceed 10 (its total cap was 10); the raised budget can.
+		@for $i from 1 through 20 {
+			$grey-col-width: calc(var(--grey-grid-min-col-width, 100px) * #{($i + 1) * 0.5});
+
+			// `flex-grow: 1` matters: upstream redistributes spare width across
+			// columns, and pinning width == min-width == max-width would leave a
+			// narrow child table as a few thin columns beside a large empty gap.
+			// Growing from a floor instead means a table that fits still fills the
+			// container, while a table that overflows sits at its floor and scrolls.
+			.data-row.row > .col.col-xs-#{$i} {
+				flex: 1 0 $grey-col-width;
+				min-width: $grey-col-width;
+				max-width: none;
+			}
+		}
+
+		// ------------------------------------------------------ heading + filter
+
+		// .grid-heading-row is container-width, so its background and bottom border
+		// stop short once the row scrolls — move both onto the cells
+		.grid-heading-row .data-row.row > .col {
+			background-color: var(--subtle-fg);
+		}
+
+		.grid-heading-row:not(.with-filter) .data-row.row > .col {
+			border-bottom: 1px solid var(--table-border-color);
+		}
+
+		.grid-heading-row .data-row.row.filter-row > .col {
+			background-color: var(--bg-color);
+		}
+
+		// ---------------------------------------------------------- data rows
+
+		.grid-body .rows > .grid-row > .data-row.row > .col {
+			border-bottom: 1px solid var(--table-border-color);
+		}
+
+		.grid-body .rows > .grid-row:last-child > .data-row.row > .col {
+			border-bottom: none;
+		}
+
+		// ------------------------------------------------------ pinned columns
+
+		// `left` / `right` are written inline by refresh_sticky() as the running sum of
+		// the preceding pinned cells' offsetWidth in the same row.
+		.data-row.row > .col.grey-sticky-col {
+			position: sticky;
+			z-index: 2;
+			background-color: var(--modal-bg);
+			box-shadow: 1px 0 0 0 var(--grey-grid-sticky-shadow);
+		}
+
+		.data-row.row.highlight > .col.grey-sticky-col {
+			background-color: var(--yellow-highlight-color);
+		}
+
+		.grid-heading-row .data-row.row > .col.grey-sticky-col {
+			z-index: 3;
+			background-color: var(--subtle-fg);
+		}
+
+		.grid-heading-row .data-row.row.filter-row > .col.grey-sticky-col {
+			z-index: 3;
+			background-color: var(--bg-color);
+		}
+
+		// frappe puts dir="rtl" on <html>; refresh_sticky() then writes `right` instead
+		// of `left`, so only the separator side has to be mirrored here
+		[dir="rtl"] & .data-row.row > .col.grey-sticky-col {
+			box-shadow: -1px 0 0 0 var(--grey-grid-sticky-shadow);
+		}
+	}
+
+	// ------------------------------------------- Configure Columns dialog toggle
+
+	.grey-sticky-toggle {
+		.grey-sticky-label {
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			margin-bottom: 0;
+			cursor: pointer;
+			font-size: var(--text-xs);
+			color: var(--text-muted);
+			white-space: nowrap;
+			overflow: hidden;
+		}
+
+		input.grey-sticky-check {
+			margin: 0;
+			cursor: pointer;
+		}
+	}
+}

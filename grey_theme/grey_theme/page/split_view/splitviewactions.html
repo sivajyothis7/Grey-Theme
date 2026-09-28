@@ -1,0 +1,30 @@
+<div class="custom-btn-group">
+	<button type="button" class="btn btn-default btn-sm ellipsis" data-toggle="dropdown" aria-expanded="false">
+		<span class="hidden-xs">
+			<svg class="icon icon-sm" aria-hidden="true">
+				<use href="#icon-dashboard"></use>
+			</svg>
+			<span class="custom-btn-group-label">{{ __("Split View") }}</span>
+			<svg class="icon icon-xs" aria-hidden="true">
+				<use href="#icon-select"></use>
+			</svg>
+		</span>
+		<span class="visible-xs">
+			<svg class="icon icon-sm" aria-hidden="true">
+				<use href="#icon-list"></use>
+			</svg>
+		</span>
+	</button>
+	<ul class="dropdown-menu" role="menu">
+		<li data-view="List">
+			<a class="grey-link dropdown-item" href="#" onclick="return false;">
+				<span class="menu-item-icon">
+					<svg class="icon icon-sm" aria-hidden="true">
+						<use href="#icon-list"></use>
+					</svg>
+				</span>
+				<span class="menu-item-label" data-label="List">{{ __("List") }}</span>
+			</a>
+		</li>
+	</ul>
+</div>
