@@ -42,6 +42,11 @@
 	// would render unsized and misalign the heading, filter and data rows.
 	const MAX_COLUMN_WIDTH = 20;
 
+	// Frappe's own budget: setup_visible_columns() stops at `total_colsize > 11`, which
+	// is what keeps a stock grid inside one 12-unit bootstrap row. A grid at or under
+	// this needs no help from us — see needs_wide_layout().
+	const STOCK_COLUMN_CAP = 11;
+
 	/* ---------------------------------------------------------------- config */
 
 	function get_cfg() {
@@ -174,8 +179,17 @@
 		if (!grid || !enabled()) return;
 		if (!grid.grey_sticky_fieldnames) recompute_sticky_fieldnames(grid);
 
+		// Re-evaluated on every refresh, not just at make(): Configure Columns can add
+		// or remove columns and flip a grid between the stock and the wide layout.
+		const host = (grid.form_grid && grid.form_grid[0]) || null;
+		const container = host && host.closest(".form-grid-container");
+		const wide = needs_wide_layout(grid);
+		if (container) container.classList.toggle("grey-grid-wide", wide);
+
 		const names = grid.grey_sticky_fieldnames || [];
-		const pin = sticky_enabled();
+		// Nothing overflows on a stock-width grid, so there is nothing to pin. Clearing
+		// here also strips any offsets left behind by a grid that used to be wide.
+		const pin = wide && sticky_enabled();
 		const rtl = is_rtl();
 
 		const rows = [];
@@ -239,7 +253,6 @@
 		// so every offsetWidth reads 0 and we would write left:0 onto every pinned cell
 		// — stacking them on top of each other once the tab is finally opened. Defer
 		// instead, and recompute the first time the grid actually has geometry.
-		const host = (grid.form_grid && grid.form_grid[0]) || null;
 		if (!host || !host.offsetParent) {
 			grid.grey_sticky_dirty = true;
 			watch_for_layout(grid);
@@ -392,8 +405,12 @@
 	function append_overflow_columns(grid) {
 		if (!grid || !grid.visible_columns) return;
 
+		// Recomputed from scratch on every setup_visible_columns(): this is the single
+		// source of truth for whether the wide layout is needed (see needs_wide_layout).
+		grid.grey_appended_columns = 0;
+
 		const limit = column_limit();
-		if (limit <= 11) return;
+		if (limit <= STOCK_COLUMN_CAP) return;
 
 		const use_user_columns = !!(grid.user_defined_columns && grid.user_defined_columns.length);
 		const fields = use_user_columns
@@ -444,6 +461,7 @@
 
 			grid.visible_columns.push([df, df.colsize]);
 			present[df.fieldname] = true;
+			grid.grey_appended_columns += 1;
 		}
 		// deliberately no width-redistribution pass: upstream skips it too once the
 		// cap has fired, and redistributing here would desync header/filter/data rows
@@ -748,7 +766,37 @@
 			setup_dropdown_escape($container);
 		}
 
+		$container.toggleClass("grey-grid-wide", needs_wide_layout(grid));
+
 		refresh_sticky(grid);
+	}
+
+	/**
+	 * Does this grid actually need the fixed-width scrolling layout?
+	 *
+	 * Only when the columns no longer fit Frappe's 12-unit bootstrap row. Stock Frappe
+	 * caps `setup_visible_columns()` at STOCK_COLUMN_CAP units precisely so a grid never
+	 * overflows, and lays those columns out as percentages that fill the container and
+	 * line the heading, filter and data rows up exactly.
+	 *
+	 * On a child table that already fits (Sales Invoice Item renders 7 columns totalling
+	 * 10 units, so the raised budget appends nothing) swapping that for pixel widths is
+	 * all risk and no benefit: any per-row difference in the non-flexible cells shows up
+	 * as drift between the heading and the data rows. So leave those grids completely
+	 * stock and only switch the layout on where the raised budget actually bought us
+	 * extra columns — which is also the only case where there is anything to scroll and
+	 * therefore anything to pin.
+	 */
+	function needs_wide_layout(grid) {
+		if (!enabled() || !grid) return false;
+
+		// The exact signal: append_overflow_columns() counts the columns it added
+		// BEYOND the set stock Frappe had already accepted. Re-deriving the total
+		// colsize here instead would mean re-implementing Frappe's own arithmetic
+		// (its running total seeds at 1, and update_default_colsize() fills in a
+		// per-fieldtype size for any field with no explicit `columns`) and getting a
+		// different answer than the code that actually built the row.
+		return cint(grid.grey_appended_columns) > 0;
 	}
 
 	/**
@@ -762,6 +810,12 @@
 
 		function place() {
 			if (!$dropdown || !$dropdown.length || !anchor || !anchor.isConnected) {
+				restore();
+				return;
+			}
+			// Only a wide grid sets overflow-x, so only a wide grid clips the dropdown.
+			// On a stock-width grid leave Awesomplete's own positioning alone.
+			if (!$container.hasClass("grey-grid-wide")) {
 				restore();
 				return;
 			}

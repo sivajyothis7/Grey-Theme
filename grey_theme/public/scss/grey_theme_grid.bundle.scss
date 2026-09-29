@@ -26,7 +26,13 @@ body.grey-ui-grid {
 	--grey-grid-action-width: 40px;
 	--grey-grid-sticky-shadow: var(--table-border-color);
 
-	.form-grid-container.grey-grid-scroll {
+	// `.grey-grid-wide` is added by enhance_instance()/refresh_sticky() ONLY when the
+	// columns no longer fit Frappe's 12-unit bootstrap row. A child table that already
+	// fits keeps Frappe's stock percentage layout untouched: that layout already fills
+	// the container and aligns the heading, filter and data rows exactly, so replacing
+	// it with pixel widths there is all risk and no benefit. Everything below is the
+	// wide-grid layout and must stay behind this class.
+	.form-grid-container.grey-grid-scroll.grey-grid-wide {
 		// beats frappe's `@media (min-width: md) { .form-grid-container { overflow-x: unset !important } }`
 		// on specificity, and its `@media (max-width: md) { overflow-x: clip }`.
 		// NB: `clip` would disable scrolling, so it is never used here.
@@ -136,11 +142,17 @@ body.grey-ui-grid {
 		// the trailing utility cells carry no col-xs-N class: the open-row button on a
 		// data row, the configure-columns gear on the heading row and the filter row's
 		// trailing spacer. They must all be the SAME width or the three rows misalign.
+		// This is also the ONLY cell allowed to grow. When the columns do not quite
+		// fill the container, the slack has to go somewhere or the grid ends in a bare
+		// gap; sending all of it to the single trailing cell leaves every preceding
+		// column at a fixed offset, so the heading, filter and data rows still line up
+		// exactly. Growing the data columns instead is what broke alignment before:
+		// free space is distributed per row, so any per-row difference compounds.
 		.data-row.row > .col:not([class*="col-xs-"]):not(.row-check):not(.row-index) {
-			flex: 0 0 auto;
+			flex: 1 0 var(--grey-grid-action-width);
 			width: var(--grey-grid-action-width);
 			min-width: var(--grey-grid-action-width);
-			max-width: var(--grey-grid-action-width);
+			max-width: none;
 		}
 
 		// col-xs-N -> a width derived from the configured minimum column width.
@@ -154,15 +166,18 @@ body.grey-ui-grid {
 		@for $i from 1 through 20 {
 			$grey-col-width: calc(var(--grey-grid-min-col-width, 100px) * #{($i + 1) * 0.5});
 
-			// `flex-grow: 1` matters: upstream redistributes spare width across
-			// columns, and pinning width == min-width == max-width would leave a
-			// narrow child table as a few thin columns beside a large empty gap.
-			// Growing from a floor instead means a table that fits still fills the
-			// container, while a table that overflows sits at its floor and scrolls.
+			// width == min-width == max-width, and NO flex-grow. Grow is what broke
+			// alignment before: free space is shared between the flexible cells of
+			// each row independently, so any per-row difference in the fixed cells
+			// (the gear on the heading row vs the edit button on a data row) grows
+			// into visible drift across the columns. A grid only reaches these rules
+			// when it is already wider than the container (see .grey-grid-wide), so
+			// there is no free space to distribute anyway.
 			.data-row.row > .col.col-xs-#{$i} {
-				flex: 1 0 $grey-col-width;
+				flex: 0 0 $grey-col-width;
+				width: $grey-col-width;
 				min-width: $grey-col-width;
-				max-width: none;
+				max-width: $grey-col-width;
 			}
 		}
 
