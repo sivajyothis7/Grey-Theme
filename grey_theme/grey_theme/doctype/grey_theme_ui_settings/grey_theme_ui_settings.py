@@ -9,6 +9,12 @@ from frappe.utils import cint, cstr
 SETTINGS_DOCTYPE = "Grey Theme UI Settings"
 
 # fieldname: (default, minimum, maximum, label)
+#
+# The labels are deliberately PLAIN literals that match this DocType's field labels
+# byte-for-byte. frappe extracts DocType field labels into the translation catalogue, so
+# the `_(label)` lookup in validate() resolves against that entry at request time.
+# Do NOT wrap these in _() here: a module-level _() is evaluated once at import and would
+# freeze the message to whichever language happened to be active then.
 NUMERIC_BOUNDS = {
 	# 11 is Frappe's own built-in column budget, so anything lower is meaningless.
 	"grid_column_limit": (60, 11, 200, "Column Budget Per Row"),

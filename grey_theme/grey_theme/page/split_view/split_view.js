@@ -24,6 +24,10 @@ frappe.provide("grey_theme.split_view");
 	// doctype -> { frm, $host }. One Form instance per doctype, reused across
 	// row clicks; torn down when the split view switches to another doctype.
 	let form_cache = {};
+	// guards load_form_view against interleaved callbacks: frappe.model.with_doc calls
+	// back synchronously for a doc already in locals and asynchronously otherwise, so a
+	// second click can resolve before the first and both would append a host.
+	let load_seq = 0;
 
 	let current_doctype = null;
 	let render_timer = null;
@@ -162,6 +166,17 @@ frappe.provide("grey_theme.split_view");
 				frappe.set_route("Form", "Grey Theme UI Settings");
 			})
 			.appendTo($state.find(".off-state-action"));
+	}
+
+	/** A plain message in the list pane (permission denied, load failure). */
+	function render_pane_message(title) {
+		const $list = $("#split-view-list");
+		if (!$list.length) {
+			return;
+		}
+		$list.empty();
+		make_off_state(title, "").appendTo($list);
+		set_pane_heights();
 	}
 
 	function render_excluded_state(doctype) {
@@ -426,22 +441,15 @@ frappe.provide("grey_theme.split_view");
 	}
 
 	function reset_list_pane() {
-		// Emptying the DOM does not unregister what the ListView bound elsewhere:
-		// setup_realtime_updates() calls frappe.realtime.doctype_subscribe(doctype)
-		// (list_view.js:1482) and setup_drag_click() binds an un-namespaced
-		// $(document).on("mouseup") (list_view.js:1347). Without this teardown, walking
-		// Item -> Customer -> Sales Order leaves a live socket subscription and a
-		// document-level handler behind for every doctype visited.
-		if (current_list_view) {
-			try {
-				if (typeof current_list_view.disable_realtime_updates === "function") {
-					current_list_view.disable_realtime_updates();
-				}
-			} catch (err) {
-				// teardown must never block the next render
-			}
-			current_list_view = null;
-		}
+		// The ListView is neutralised at construction (see render_list_view) rather than
+		// torn down here. It never subscribes to realtime and never binds a
+		// document-level handler, so there is nothing global left to release.
+		//
+		// Deliberately NOT calling disable_realtime_updates(): frappe.realtime
+		// .doctype_unsubscribe is a bare `emit("doctype_unsubscribe", doctype)` with no
+		// reference counting (socketio_client.js:144-146), so calling it would cancel the
+		// subscription the user's OWN desk list view is relying on for that doctype.
+		current_list_view = null;
 
 		const $list = $("#split-view-list");
 		if (!$list.length) {
@@ -467,6 +475,17 @@ frappe.provide("grey_theme.split_view");
 			// from the list the user is actually looking at.
 			const route = frappe.get_route();
 			if (!$list.length || route[0] !== "split_view" || route[1] !== doctype) {
+				return;
+			}
+
+			// with_doctype always succeeds (getdoctype has no permission check), and
+			// ListView's own check_permissions() reacts with frappe.set_route("") +
+			// frappe.throw — which would throw the user out of Split View to the home
+			// workspace. Fail inside the pane instead.
+			if (!frappe.perm.has_perm(doctype, 0, "read")) {
+				render_pane_message(
+					__("You do not have permission to view {0}.", [__(doctype)])
+				);
 				return;
 			}
 
@@ -505,6 +524,18 @@ frappe.provide("grey_theme.split_view");
 			// frappe.run_serially(), so setup_events() -> setup_list_click() is still
 			// several promise ticks away.
 			list_view.setup_list_click = function () {};
+
+			// setup_drag_click() binds `$(document).on("mouseup", ...)` with no namespace
+			// (list_view.js:1350) and frappe never removes it, so every doctype switch
+			// would leave another document-level handler — each closing over the discarded
+			// ListView and its detached DOM — bound for the rest of the session.
+			list_view.setup_drag_click = function () {};
+
+			// setup_realtime_updates() starts with an unconditional
+			// frappe.realtime.off("list_update") and then subscribes (list_view.js:1482),
+			// i.e. it STEALS the single global handler from the user's own list view. The
+			// split pane does not need live updates badly enough to break that.
+			list_view.setup_realtime_updates = function () {};
 
 			current_list_view = list_view;
 
@@ -622,9 +653,58 @@ frappe.provide("grey_theme.split_view");
 		$form.find("#split-view-form-empty").show();
 	}
 
+	/**
+	 * Release what a discarded Form registered outside its own DOM.
+	 *
+	 * frm.dirty() adds a capturing `beforeunload` listener (form.js:1359) and ONLY
+	 * frm.refresh() removes it (form.js:383). Dropping a dirty Form without this leaves
+	 * the listener installed for the rest of the browser session, so every later reload
+	 * or tab close raises a phantom "unsaved changes" prompt.
+	 */
+	function release_form(entry) {
+		if (!entry || !entry.frm) {
+			return;
+		}
+		try {
+			if (entry.frm.beforeUnloadListener) {
+				window.removeEventListener("beforeunload", entry.frm.beforeUnloadListener, {
+					capture: true,
+				});
+			}
+		} catch (err) {
+			// releasing must never block the next render
+		}
+		// grids own observers of their own — see teardown_grids_of()
+		teardown_grids_of(entry.frm);
+	}
+
+	/**
+	 * grey_theme's grid enhancer attaches a ResizeObserver (and sometimes an
+	 * IntersectionObserver) per child-table grid. Removing the form's DOM does not stop
+	 * them, so hand each grid back to the enhancer's own teardown when one exists.
+	 */
+	function teardown_grids_of(frm) {
+		const teardown =
+			(window.frappe && frappe.grey_theme && frappe.grey_theme.teardown_grid) || null;
+		if (!teardown || !frm || !frm.fields_dict) {
+			return;
+		}
+		Object.keys(frm.fields_dict).forEach(function (fieldname) {
+			const field = frm.fields_dict[fieldname];
+			if (field && field.grid) {
+				try {
+					teardown(field.grid);
+				} catch (err) {
+					// ignore
+				}
+			}
+		});
+	}
+
 	function teardown_form_cache() {
 		Object.keys(form_cache).forEach(function (doctype) {
 			const entry = form_cache[doctype];
+			release_form(entry);
 			if (entry && entry.$host) {
 				entry.$host.remove();
 			}
@@ -642,6 +722,7 @@ frappe.provide("grey_theme.split_view");
 			const host = entry && entry.$host && entry.$host.get(0);
 			const stale = cached !== doctype || !host || !$.contains(pane, host);
 			if (stale) {
+				release_form(entry);
 				if (entry && entry.$host) {
 					entry.$host.remove();
 				}
@@ -691,11 +772,13 @@ frappe.provide("grey_theme.split_view");
 		$form.find("#split-view-form-empty").hide();
 		$form.find(".split-view-form-message").remove();
 
+		const seq = ++load_seq;
+
 		const cached = form_cache[doctype];
 		if (cached) {
 			cached.$host.show();
 			frappe.model.with_doc(doctype, docname, function (name, r) {
-				if (frappe.get_route()[0] !== "split_view") {
+				if (seq !== load_seq || frappe.get_route()[0] !== "split_view") {
 					return;
 				}
 				if (!doc_is_loadable($form, doctype, name, r)) {
@@ -715,10 +798,22 @@ frappe.provide("grey_theme.split_view");
 		frappe.model.with_doc(doctype, docname, function (name, r) {
 			$loading.remove();
 
-			if (frappe.get_route()[0] !== "split_view") {
+			// A later click already won. with_doc calls back synchronously for a doc
+			// already in locals and asynchronously otherwise, so callbacks can interleave
+			// and both branches would append their own host.
+			if (seq !== load_seq || frappe.get_route()[0] !== "split_view") {
 				return;
 			}
 			if (!doc_is_loadable($form, doctype, name, r)) {
+				return;
+			}
+
+			// re-read: another callback may have built the Form while this one waited
+			const existing = form_cache[doctype];
+			if (existing) {
+				existing.$host.show();
+				existing.frm.refresh(docname);
+				after_form_render();
 				return;
 			}
 
@@ -729,7 +824,14 @@ frappe.provide("grey_theme.split_view");
 			// frappe.router.doctype_layout is never cleared when the current
 			// route is a Page, so passing it here would apply a stale DocType
 			// Layout left over from whatever form was open last.
-			const frm = new frappe.ui.form.Form(doctype, $host, true, undefined);
+			//
+			// in_form MUST be false. With it true, renaming a document in this pane runs
+			// rename_notify's tail (form.js:1216-1227): it calls
+			// frappe.set_route("Form", ...) — throwing the user out of Split View — and
+			// writes frappe.re_route[frappe.router.get_sub_path()], keyed on the CURRENT
+			// sub path "split_view/<DocType>", which then permanently redirects that
+			// Split View route to the renamed document's form.
+			const frm = new frappe.ui.form.Form(doctype, $host, false, undefined);
 			frm.refresh(docname);
 
 			form_cache[doctype] = { frm: frm, $host: $host };
@@ -745,7 +847,13 @@ frappe.provide("grey_theme.split_view");
 	}
 
 	function tidy_panes() {
-		$("#split-view-list > .page-head").hide();
+		// Hide the list pane's title and menu but NOT the whole .page-head: the
+		// bulk-select "Actions" button lives in .page-head .standard-actions, and
+		// on_row_checked() only un-hides it (page.js show_actions_menu) — hiding the head
+		// outright leaves checked rows with no reachable action.
+		$("#split-view-list > .page-head .page-title").hide();
+		$("#split-view-list > .page-head .menu-btn-group").hide();
+		$("#split-view-list > .page-head .page-actions .primary-action").hide();
 		$("#split-view-list .layout-side-section").hide();
 		$("#split-view-form .layout-side-section").hide();
 		$("#split-view-form .page-head .standard-actions .prev-doc").hide();

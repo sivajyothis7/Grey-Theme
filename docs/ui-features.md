@@ -21,8 +21,13 @@ from the row — you have to open each row to see them.
 
 Grid Enhancer changes that:
 
-- The grid body scrolls **horizontally**, so more columns than the stock budget
-  can be rendered side by side.
+- Columns that stock Frappe would **drop** past its 11-unit budget are rendered.
+- Column widths are **computed**: Frappe's own N/12 proportion is resolved against
+  the live container and floored at `grid_min_column_width`. On a wide screen the
+  proportion wins and the grid fills the container exactly as stock does.
+- The grid scrolls **horizontally** once those widths no longer fit — a narrow
+  window, a Split View pane, browser zoom, or simply a lot of columns. A child
+  table that fits does not scroll, and does not need to.
 - The **heading row and the filter/search row scroll with the body**, so column
   headers stay aligned with their data.
 - Columns can be **pinned (sticky)** to the left from the *Configure Columns*
@@ -34,8 +39,8 @@ Grid Enhancer changes that:
 | Field | What it controls |
 |---|---|
 | `enable_grid_enhancer` | Master switch. Unticked = feature completely inert. |
-| `grid_column_limit` | Total column units rendered per grid row. Stock Frappe caps this at 11; raise it to render more columns into the scrollable area. |
-| `grid_min_column_width` | Minimum rendered width of a single grid column, in pixels. Stops a wide grid from squeezing columns into unreadable slivers. |
+| `grid_column_limit` | Total column units rendered per grid row. Stock Frappe caps this at 11; raise it to render more columns. Note the renderer reserves 1 unit internally, so the *Configure Columns* dialog accepts totals up to `grid_column_limit - 1`. |
+| `grid_min_column_width` | The per-unit floor, in pixels. A column `N` units wide never renders narrower than `N + 1` halves of this (a 1-unit column ≥ 1x, a 3-unit column ≥ 2x). Raising it makes grids reach their scrolling threshold sooner. |
 | `grid_sticky_columns` | Allow pinning columns from *Configure Columns*. |
 | `grid_max_sticky_columns` | How many columns a user may pin at once. |
 
@@ -130,18 +135,24 @@ Run this after any install, upgrade, or Frappe version bump.
 1. Tick **Enable Grid Enhancer** in *Grey Theme UI Settings*, save,
    `bench --site <site> clear-cache`, hard-reload the desk.
 2. Open a **Sales Invoice** (new or existing) and look at the Items table.
-   Confirm the grid now scrolls horizontally instead of dropping columns.
+   Confirm columns that stock Frappe dropped are now rendered, and that the grid
+   still **fills** the container with no gap on the right.
+2b. **Narrow the browser window** (or open the same form in Split View) until the
+   per-column floors bind. Confirm the grid gains a horizontal scrollbar rather
+   than squeezing the columns. A grid that fits is *supposed* not to scroll.
 3. Scroll the grid right. Confirm the **heading row** and the **filter/search
    row** move in lockstep with the data rows — no drift, no misaligned headers.
-4. Open *Configure Columns* on that grid and **pin two columns**. Save.
-   Confirm they stay put while you scroll the rest of the grid right.
+4. Open *Configure Columns* on that grid and **pin two columns**. Save. Narrow the
+   window until the grid scrolls, then confirm the pinned columns stay put while
+   the rest scrolls under them. (Pinning has no visible effect while the grid
+   still fits — there is nothing to scroll.)
 5. **Reload the page.** Confirm the pinned columns are still pinned (the state is
    saved in your GridView user setting).
 6. In *Configure Columns*, try to pin a column that is **not contiguous from the
-   left** (e.g. pin column 1 and column 4). Confirm the
-   "sticky columns must be contiguous from the left" error fires.
-7. Try to pin **more than `grid_max_sticky_columns`**. Confirm the
-   "max N sticky columns" error fires.
+   left** (e.g. pin column 1 and column 4). Confirm an error about sticky columns
+   needing to start at the left edge is raised and the dialog does not save.
+7. Try to pin **more than `grid_max_sticky_columns`**. Confirm an error naming
+   that maximum is raised.
 8. Scroll the grid right, then **expand a row** (the pencil / *Edit* control).
    Confirm the row form opens correctly and is not clipped or offset.
 9. Add enough rows to exceed one page (**more than 50**). Confirm the grid
@@ -224,5 +235,11 @@ implemented directly; nothing is injected into the public website.
   that DocType (`frappe.model.user_settings`). They are not a company-wide layout:
   each user pins their own columns, and clearing a user's settings clears the pins.
 - **Desk only.** Neither feature touches the website, portal pages, or web forms.
+- **Pinning engages only when the grid scrolls.** On a wide screen a child table
+  that fits shows no scrollbar, so a pinned column looks no different. It takes
+  effect as soon as the container narrows.
+- **Split View does not live-update.** Its list deliberately does not subscribe to
+  realtime, because frappe keeps a single global `list_update` handler and
+  subscribing would take it away from the user's own list view.
 - Changing settings needs a `clear-cache` plus a hard reload before users see it —
   see *Why `clear-cache` matters* above.

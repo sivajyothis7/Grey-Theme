@@ -19,21 +19,3 @@
 
 import "./ui/grid_enhancer";
 import "./ui/split_view_menu";
-
-/**
- * Convenience accessors for OTHER code (client scripts, custom app JS).
- *
- * Deliberately not used by the two modules above: ES imports are hoisted, so both
- * of them finish executing before these assignments run. Anything that wants these
- * helpers must call them from a later callback — form events, app_ready, a click
- * handler — never at its own module top level.
- */
-frappe.provide("grey_theme.ui");
-
-grey_theme.ui.get_settings = function () {
-	return (frappe.boot && frappe.boot.grey_theme_ui) || {};
-};
-
-grey_theme.ui.is_enabled = function (flag) {
-	return !!grey_theme.ui.get_settings()[flag];
-};

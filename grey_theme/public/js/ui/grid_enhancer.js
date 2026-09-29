@@ -33,7 +33,7 @@
 	if (window[MODULE_FLAG]) return;
 
 	const DEFAULT_MIN_COL_WIDTH = 100;
-	const DEFAULT_COLUMN_LIMIT = 40;
+	const DEFAULT_COLUMN_LIMIT = 60; // keep in step with the DocType field default
 	const DEFAULT_MAX_STICKY = 3;
 	const STICKY_CLASS = "grey-sticky-col";
 
@@ -246,12 +246,37 @@
 		watch_for_resize(grid, container);
 	}
 
+	/**
+	 * Release the observers a grid owns. Nothing in frappe tells us a grid is going
+	 * away, so this is exported as frappe.grey_theme.teardown_grid for callers that DO
+	 * know — Split View tears its cached forms down and calls it per child-table grid.
+	 */
+	function teardown_grid(grid) {
+		if (!grid) return;
+		["grey_resize_watcher", "grey_layout_watcher"].forEach(function (key) {
+			const observer = grid[key];
+			if (!observer) return;
+			try {
+				observer.disconnect();
+			} catch (err) {
+				// ignore
+			}
+			grid[key] = null;
+		});
+	}
+
 	/** Column widths are container-relative, so they have to follow a resize. */
 	function watch_for_resize(grid, container) {
 		if (grid.grey_resize_watcher || typeof ResizeObserver === "undefined") return;
 
 		let last = container.clientWidth;
 		grid.grey_resize_watcher = new ResizeObserver(function () {
+			// the form this grid belonged to may have been discarded (Split View swaps
+			// doctypes); stop rather than keep recomputing against a detached node
+			if (!container.isConnected) {
+				teardown_grid(grid);
+				return;
+			}
 			const now = container.clientWidth;
 			if (now === last) return;
 			last = now;
@@ -327,10 +352,8 @@
 
 				cell.classList.toggle(STICKY_CLASS, want);
 				if (want) {
-					cell.setAttribute("data-sticky-order", String(cells.length));
 					cells.push(cell);
 				} else {
-					cell.removeAttribute("data-sticky-order");
 					cell.style.left = "";
 					cell.style.right = "";
 				}
@@ -344,11 +367,9 @@
 		// — stacking them on top of each other once the tab is finally opened. Defer
 		// instead, and recompute the first time the grid actually has geometry.
 		if (!host || !host.offsetParent) {
-			grid.grey_sticky_dirty = true;
 			watch_for_layout(grid);
 			return;
 		}
-		grid.grey_sticky_dirty = false;
 
 		// --- phase 2: reads (one layout flush for the whole grid)
 		plans.forEach(function (plan) {
@@ -599,13 +620,10 @@
 		if (!$col.attr("data-fieldname")) $col.attr("data-fieldname", df.fieldname);
 
 		const names = (grid_row && grid_row.grid && grid_row.grid.grey_sticky_fieldnames) || [];
-		const order = names.indexOf(df.fieldname);
 
-		if (sticky_enabled() && order > -1) {
-			$col.addClass(STICKY_CLASS).attr("data-sticky-order", order);
-		} else {
-			$col.removeClass(STICKY_CLASS).removeAttr("data-sticky-order");
-		}
+		// Only the class is set here; the authoritative pinned run (and each cell's left
+		// offset) is decided per row by refresh_sticky(), which is the single writer.
+		$col.toggleClass(STICKY_CLASS, sticky_enabled() && names.indexOf(df.fieldname) > -1);
 	}
 
 	function stamp_dialog_sticky(grid_row) {
@@ -743,7 +761,13 @@
 			if (!enabled()) return orig.apply(this, arguments);
 
 			const rows = this.selected_columns_for_grid || [];
-			const limit = column_limit();
+			// The renderer seeds its running total at 1 (append_overflow_columns, mirroring
+			// upstream grid.js) and stops when it EXCEEDS the limit, so the budget actually
+			// available to columns is limit - 1. Validating against `limit` let a layout
+			// summing to exactly `limit` save cleanly and then silently lose its last
+			// column on render. Upstream keeps the same offset: dialog caps at 10, renderer
+			// at 11.
+			const limit = Math.max(1, column_limit() - 1);
 			const doctype = this.grid && this.grid.doctype;
 
 			let total_column_width = 0.0;
@@ -993,4 +1017,13 @@
 	}
 
 	init();
+
+	// Exported so a caller that knows a grid is being discarded can release its
+	// observers — frappe itself has no grid-teardown hook. Split View uses this.
+	// Guarded on `enabled()`: with the feature off no grid is ever enhanced, so there is
+	// nothing to release, and a disabled site must stay completely untouched.
+	if (enabled() && frappe.provide) {
+		frappe.provide("frappe.grey_theme");
+		frappe.grey_theme.teardown_grid = teardown_grid;
+	}
 })();
