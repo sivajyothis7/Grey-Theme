@@ -91,8 +91,16 @@ body.grey-ui-split {
 			overflow-x: hidden;
 			background: var(--card-bg);
 
+			// Do NOT hide the whole head: the bulk-select "Actions" button lives in
+			// .page-head .standard-actions and core only un-hides it when rows are
+			// checked, so hiding the head leaves checked rows with no reachable action.
+			// Hide the same three children tidy_panes() hides, and no more.
 			> .page-head {
-				display: none !important;
+				.page-title,
+				.menu-btn-group,
+				.page-actions .primary-action {
+					display: none !important;
+				}
 			}
 
 			> .container.page-body {

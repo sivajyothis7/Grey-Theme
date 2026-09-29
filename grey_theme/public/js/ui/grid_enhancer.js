@@ -173,12 +173,26 @@
 	 * Recompute sticky offsets for the heading row, the filter row and every data row.
 	 * Fully idempotent; never throws for a detached or empty grid.
 	 */
+	/**
+	 * Coalesced entry point.
+	 *
+	 * Grid.refresh() calls make_head() and render_result_rows() itself, and all three are
+	 * wrapped, so one refresh would otherwise run the whole measure-and-place pass three
+	 * times — each one a forced layout over every cell of every row. Collapse them into
+	 * a single pass on the microtask queue. All three wrappers are kept: pagination's
+	 * go_to_page() calls render_result_rows() directly, with no refresh() around it.
+	 */
 	function refresh_sticky(grid) {
-		try {
-			do_refresh_sticky(grid);
-		} catch (err) {
-			log_error(err);
-		}
+		if (!grid || grid.grey_sticky_queued) return;
+		grid.grey_sticky_queued = true;
+		Promise.resolve().then(function () {
+			grid.grey_sticky_queued = false;
+			try {
+				do_refresh_sticky(grid);
+			} catch (err) {
+				log_error(err);
+			}
+		});
 	}
 
 	/**
@@ -214,9 +228,11 @@
 			return (floor_px * (n + 1)) / 2;
 		};
 
-		// the cells that are never col-xs-N: row check, row index, trailing action
-		const fixed = CHECK_WIDTH + INDEX_WIDTH + ACTION_WIDTH;
-		const avail = Math.max(0, (container.clientWidth || 0) - fixed);
+		// The cells that are never col-xs-N: row check, row index, trailing action.
+		// Measure rather than assume — frappe hides .row-index with display:none inside
+		// .modal and inside a half-width form column (common/grid.scss), so a hard-coded
+		// total over-reserves there and the columns come out narrower than the container.
+		const avail = Math.max(0, (container.clientWidth || 0) - fixed_cell_width(grid));
 
 		let units = 0;
 		columns.forEach(function (n) {
@@ -224,14 +240,19 @@
 		});
 		if (!units) return;
 
-		// Frappe's own denominator is 12; using the real unit total instead would
-		// re-proportion the grid whenever the column set changes.
-		const per_unit = avail / Math.max(12, units);
+		// Divide by the REAL unit total, not by 12. The handle and action cells have
+		// already been taken off the top, so `avail` belongs entirely to the col-xs
+		// cells; dividing by 12 when a typical child table sums to 10 units left the
+		// last ~1/6 of every row with no cell in it (a visible gap, and the per-cell
+		// bottom borders stopped short of the right edge).
+		// floor() not round(): rounding up can add a stray pixel of overflow and make a
+		// grid that exactly fits show a scrollbar.
+		const per_unit = avail / Math.max(1, units);
 
 		const widths = {};
 		columns.forEach(function (n) {
 			if (widths[n] === undefined) {
-				widths[n] = Math.round(Math.max(per_unit * n, floor_for(n)));
+				widths[n] = Math.floor(Math.max(per_unit * n, floor_for(n)));
 			}
 		});
 
@@ -244,6 +265,28 @@
 		}
 
 		watch_for_resize(grid, container);
+	}
+
+	/**
+	 * Width of the cells that carry no col-xs-N class, measured off the heading row when
+	 * it has layout. Falls back to the nominal widths before first paint.
+	 */
+	function fixed_cell_width(grid) {
+		const fallback = CHECK_WIDTH + INDEX_WIDTH + ACTION_WIDTH;
+		const row_el =
+			(grid && grid.header_row && grid.header_row.row && grid.header_row.row[0]) || null;
+		if (!row_el || !row_el.offsetParent) return fallback;
+
+		let sum = 0;
+		let seen = false;
+		for (let i = 0; i < row_el.children.length; i++) {
+			const cell = row_el.children[i];
+			if (!cell.classList || !cell.classList.contains("col")) continue;
+			if (/\bcol-xs-\d+\b/.test(cell.className)) continue;
+			sum += cell.offsetWidth;
+			seen = true;
+		}
+		return seen ? sum : fallback;
 	}
 
 	/**
@@ -410,10 +453,36 @@
 
 		// upstream's Grid caches this.form_grid but NOT the container, so walk to it
 		const container = host.closest(".form-grid-container");
-		const width = (container && container.clientWidth) || host.clientWidth || 0;
+		const viewport = (container && container.clientWidth) || host.clientWidth || 0;
+		if (!viewport) return;
+
+		// The scrollable width, taken from the widest laid-out row rather than from the
+		// open row (show_form() sets the data row display:none, so that row's own
+		// max-content collapses to the form's width).
+		const scrollable = Math.max(viewport, host.scrollWidth || 0);
+
 		const forms = host.querySelectorAll(".form-in-grid");
 		for (let i = 0; i < forms.length; i++) {
-			forms[i].style.width = width ? width + "px" : "";
+			const form = forms[i];
+
+			// Sizing the form to the viewport alone is a geometric no-op: its containing
+			// block is .grid-row, whose content width is already exactly the viewport, so
+			// a sticky box filling it has zero slack and can never offset. Stretch the
+			// open row to the full scrollable width first — that is the slack sticky
+			// needs — then hold the form itself at one viewport.
+			const row = form.parentElement;
+			if (row && row.classList.contains("grid-row")) {
+				row.style.width = scrollable + "px";
+			}
+			form.style.width = viewport + "px";
+		}
+
+		// rows whose form has since closed must not keep the stretched width
+		const open_rows = host.querySelectorAll(".grid-row");
+		for (let i = 0; i < open_rows.length; i++) {
+			if (!open_rows[i].querySelector(".form-in-grid")) {
+				open_rows[i].style.width = "";
+			}
 		}
 	}
 
@@ -887,6 +956,7 @@
 	function setup_dropdown_escape($container) {
 		let $dropdown = null;
 		let anchor = null;
+		let $raised = null;
 
 		function place() {
 			if (!$dropdown || !$dropdown.length || !anchor || !anchor.isConnected) {
@@ -908,6 +978,18 @@
 			if (left + width > window.innerWidth - 8) {
 				left = Math.max(8, window.innerWidth - width - 8);
 			}
+			// A pinned cell is `position: sticky; z-index: 2`, which makes it its own
+			// stacking context — the dropdown lives INSIDE that cell, so no z-index of
+			// its own can lift it above the neighbouring pinned cells. Raise the cell
+			// itself for as long as the dropdown is open.
+			if (!$raised) {
+				const $cell = $(anchor).closest(".grey-sticky-col");
+				if ($cell.length) {
+					$raised = $cell;
+					$raised.css("z-index", 1054);
+				}
+			}
+
 			$dropdown.css({
 				position: "fixed",
 				top: rect.bottom + "px",
@@ -932,6 +1014,10 @@
 					"max-width": "",
 					"z-index": "",
 				});
+			}
+			if ($raised) {
+				$raised.css("z-index", "");
+				$raised = null;
 			}
 			$dropdown = null;
 			anchor = null;

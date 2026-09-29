@@ -33,6 +33,10 @@ frappe.provide("grey_theme.split_view");
 	let render_timer = null;
 	// the live ListView in the left pane, kept so it can be torn down on doctype switch
 	let current_list_view = null;
+	// which doctype the 'excluded' message is currently showing for; render_excluded_state
+	// clears current_doctype, so that variable cannot be used to tell two excluded
+	// doctypes apart and the stale message would survive the switch
+	let excluded_rendered_for = null;
 	let router_hook_installed = false;
 	let resize_hook_installed = false;
 	let split_page = null;
@@ -180,7 +184,8 @@ frappe.provide("grey_theme.split_view");
 	}
 
 	function render_excluded_state(doctype) {
-		teardown_form_cache();
+		excluded_rendered_for = doctype;
+		park_forms();
 		reset_form_pane();
 		reset_list_pane();
 		current_doctype = null;
@@ -407,7 +412,10 @@ frappe.provide("grey_theme.split_view");
 		}
 
 		if (is_excluded(doctype)) {
-			if (current_doctype !== null || !$("#split-view-list").children().length) {
+			// Track the rendered doctype explicitly: render_excluded_state() clears
+			// current_doctype, so testing that would always read null and the previous
+			// excluded doctype's message would stay on screen when switching between two.
+			if (excluded_rendered_for !== doctype || !$("#split-view-list").children().length) {
 				render_excluded_state(doctype);
 			}
 			return;
@@ -417,6 +425,14 @@ frappe.provide("grey_theme.split_view");
 			doctype !== current_doctype || !$("#split-view-list").children().length;
 
 		if (!needs_render) {
+			// frappe nulls window.cur_frm before every on_page_show (pageview.js), and the
+			// only thing that reassigns it is frm.refresh() — which the re-show path does
+			// not call. Without this the cached form on screen is fully interactive while
+			// cur_frm is null, so Ctrl+S silently does nothing.
+			const shown = current_doctype && form_cache[current_doctype];
+			if (shown && shown.frm) {
+				window.cur_frm = shown.frm;
+			}
 			set_pane_heights();
 			return;
 		}
@@ -462,7 +478,7 @@ frappe.provide("grey_theme.split_view");
 
 	function render_list_view(doctype) {
 		reset_list_pane();
-		teardown_form_cache();
+		park_forms();
 		reset_form_pane();
 		current_doctype = doctype;
 
@@ -643,90 +659,72 @@ frappe.provide("grey_theme.split_view");
 
 	/* -------------------------------------------------------------- form pane */
 
+	/**
+	 * Detached parking area for cached Form hosts.
+	 *
+	 * Forms are NEVER destroyed — see park_forms(). Their hosts live here while another
+	 * doctype is on screen, so the DOM a Form owns stays intact and re-showing it costs
+	 * a refresh() instead of a rebuild.
+	 */
+	function form_holder() {
+		let el = document.getElementById("split-view-form-holder");
+		if (!el) {
+			el = document.createElement("div");
+			el.id = "split-view-form-holder";
+			el.style.display = "none";
+			document.body.appendChild(el);
+		}
+		return el;
+	}
+
 	function reset_form_pane() {
 		const $form = $("#split-view-form");
 		if (!$form.length) {
 			return;
 		}
+		park_forms();
 		$form.children().not("#split-view-form-empty").remove();
 		$form.removeClass("has-doc");
 		$form.find("#split-view-form-empty").show();
 	}
 
 	/**
-	 * Release what a discarded Form registered outside its own DOM.
+	 * Move every cached Form's host out of the visible pane WITHOUT destroying it.
 	 *
-	 * frm.dirty() adds a capturing `beforeunload` listener (form.js:1359) and ONLY
-	 * frm.refresh() removes it (form.js:383). Dropping a dirty Form without this leaves
-	 * the listener installed for the rest of the browser session, so every later reload
-	 * or tab close raises a phantom "unsaved changes" prompt.
+	 * A frappe.ui.form.Form cannot be safely discarded in v15. Form.setup() registers
+	 * `frappe.model.on(doctype, "*", ...)` for the doctype and for each child table
+	 * (form.js:281, :314), and those push onto the append-only global
+	 * `frappe.model.events` (model.js:589-593) — v15 exposes no `frappe.model.off`.
+	 * It also binds an un-namespaced `$(document).on("rename", ...)` (form.js:324).
+	 * A dropped Form therefore keeps reacting to edits of the document it last showed:
+	 * its handler calls `me.dirty()` (form.js:288), which re-adds the capturing
+	 * `beforeunload` listener that only its own refresh() would remove — so the phantom
+	 * "unsaved changes" prompt comes back — and re-runs that doctype's client scripts
+	 * once per orphan, unboundedly.
+	 *
+	 * Stock frappe never discards a Form either: formview.js caches one per doctype for
+	 * the session. We do the same, and park the host instead.
 	 */
-	function release_form(entry) {
-		if (!entry || !entry.frm) {
-			return;
-		}
-		try {
-			if (entry.frm.beforeUnloadListener) {
-				window.removeEventListener("beforeunload", entry.frm.beforeUnloadListener, {
-					capture: true,
-				});
-			}
-		} catch (err) {
-			// releasing must never block the next render
-		}
-		// grids own observers of their own — see teardown_grids_of()
-		teardown_grids_of(entry.frm);
-	}
-
-	/**
-	 * grey_theme's grid enhancer attaches a ResizeObserver (and sometimes an
-	 * IntersectionObserver) per child-table grid. Removing the form's DOM does not stop
-	 * them, so hand each grid back to the enhancer's own teardown when one exists.
-	 */
-	function teardown_grids_of(frm) {
-		const teardown =
-			(window.frappe && frappe.grey_theme && frappe.grey_theme.teardown_grid) || null;
-		if (!teardown || !frm || !frm.fields_dict) {
-			return;
-		}
-		Object.keys(frm.fields_dict).forEach(function (fieldname) {
-			const field = frm.fields_dict[fieldname];
-			if (field && field.grid) {
-				try {
-					teardown(field.grid);
-				} catch (err) {
-					// ignore
-				}
-			}
-		});
-	}
-
-	function teardown_form_cache() {
+	function park_forms() {
+		const holder = form_holder();
 		Object.keys(form_cache).forEach(function (doctype) {
 			const entry = form_cache[doctype];
-			release_form(entry);
-			if (entry && entry.$host) {
-				entry.$host.remove();
+			if (entry && entry.$host && entry.$host.length) {
+				entry.$host.hide().appendTo(holder);
 			}
-			delete form_cache[doctype];
 		});
-		form_cache = {};
 	}
 
-	/** Drop every cached Form except the one for `doctype`, plus any whose host
-	 *  node is no longer attached to the form pane. */
-	function prune_form_cache(doctype, $form) {
-		const pane = $form.get(0);
+	/** Park every cached Form except the one for `doctype`. Nothing is destroyed. */
+	function prune_form_cache(doctype) {
+		const holder = form_holder();
 		Object.keys(form_cache).forEach(function (cached) {
+			if (cached === doctype) {
+				return;
+			}
 			const entry = form_cache[cached];
-			const host = entry && entry.$host && entry.$host.get(0);
-			const stale = cached !== doctype || !host || !$.contains(pane, host);
-			if (stale) {
-				release_form(entry);
-				if (entry && entry.$host) {
-					entry.$host.remove();
-				}
-				delete form_cache[cached];
+			if (entry && entry.$host && entry.$host.length) {
+				entry.$host.hide().appendTo(holder);
 			}
 		});
 	}
@@ -766,7 +764,7 @@ frappe.provide("grey_theme.split_view");
 		}
 
 		mark_selected_row(docname);
-		prune_form_cache(doctype, $form);
+		prune_form_cache(doctype);
 
 		$form.addClass("has-doc");
 		$form.find("#split-view-form-empty").hide();
@@ -776,7 +774,8 @@ frappe.provide("grey_theme.split_view");
 
 		const cached = form_cache[doctype];
 		if (cached) {
-			cached.$host.show();
+			// the host may be parked in the detached holder from a previous doctype
+			cached.$host.appendTo($form).show();
 			frappe.model.with_doc(doctype, docname, function (name, r) {
 				if (seq !== load_seq || frappe.get_route()[0] !== "split_view") {
 					return;
@@ -811,7 +810,7 @@ frappe.provide("grey_theme.split_view");
 			// re-read: another callback may have built the Form while this one waited
 			const existing = form_cache[doctype];
 			if (existing) {
-				existing.$host.show();
+				existing.$host.appendTo($form).show();
 				existing.frm.refresh(docname);
 				after_form_render();
 				return;
