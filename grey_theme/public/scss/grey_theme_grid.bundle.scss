@@ -26,13 +26,18 @@ body.grey-ui-grid {
 	--grey-grid-action-width: 40px;
 	--grey-grid-sticky-shadow: var(--table-border-color);
 
-	// `.grey-grid-wide` is added by enhance_instance()/refresh_sticky() ONLY when the
-	// columns no longer fit Frappe's 12-unit bootstrap row. A child table that already
-	// fits keeps Frappe's stock percentage layout untouched: that layout already fills
-	// the container and aligns the heading, filter and data rows exactly, so replacing
-	// it with pixel widths there is all risk and no benefit. Everything below is the
-	// wide-grid layout and must stay behind this class.
-	.form-grid-container.grey-grid-scroll.grey-grid-wide {
+	// Native horizontal scrolling + `position: sticky` pinned cells.
+	//
+	// Column widths are PIXELS, computed per grid by apply_column_widths(): Frappe's
+	// own N/12 proportion scaled to the live container, floored at
+	// `grid_min_column_width`. On a wide screen the proportion wins and the grid looks
+	// like stock; as the container narrows — a half-width Split View pane, a small
+	// laptop, browser zoom — the floors take over, the row overflows and scrolls, and
+	// pinned columns start doing their job. Every row uses the same col-xs-N class and
+	// therefore the same computed width, so the heading, filter and data rows cannot
+	// drift apart.
+	//
+	.form-grid-container.grey-grid-scroll {
 		// beats frappe's `@media (min-width: md) { .form-grid-container { overflow-x: unset !important } }`
 		// on specificity, and its `@media (max-width: md) { overflow-x: clip }`.
 		// NB: `clip` would disable scrolling, so it is never used here.
@@ -104,16 +109,23 @@ body.grey-ui-grid {
 			right: 0;
 		}
 
+		// `width: max-content` is REQUIRED, not cosmetic: a sticky cell is clamped to
+		// its containing block, which is this row. Leave the row at container width
+		// while its cells overflow and a pinned cell is dragged along with the scroll
+		// instead of holding — it can never move further right than the row's own edge.
 		.data-row.row {
 			flex-wrap: nowrap;
 			width: max-content;
 			min-width: 100%;
 			margin-left: 0;
 			margin-right: 0;
+		}
+
+		.grid-body .rows > .grid-row > .data-row.row > .col {
 			background-color: var(--modal-bg);
 		}
 
-		.data-row.row.highlight {
+		.data-row.row.highlight > .col {
 			background-color: var(--yellow-highlight-color);
 		}
 
@@ -142,42 +154,38 @@ body.grey-ui-grid {
 		// the trailing utility cells carry no col-xs-N class: the open-row button on a
 		// data row, the configure-columns gear on the heading row and the filter row's
 		// trailing spacer. They must all be the SAME width or the three rows misalign.
-		// This is also the ONLY cell allowed to grow. When the columns do not quite
-		// fill the container, the slack has to go somewhere or the grid ends in a bare
-		// gap; sending all of it to the single trailing cell leaves every preceding
-		// column at a fixed offset, so the heading, filter and data rows still line up
-		// exactly. Growing the data columns instead is what broke alignment before:
-		// free space is distributed per row, so any per-row difference compounds.
 		.data-row.row > .col:not([class*="col-xs-"]):not(.row-check):not(.row-index) {
-			flex: 1 0 var(--grey-grid-action-width);
+			flex: 0 0 auto;
 			width: var(--grey-grid-action-width);
 			min-width: var(--grey-grid-action-width);
-			max-width: none;
+			max-width: var(--grey-grid-action-width);
 		}
 
-		// col-xs-N -> a width derived from the configured minimum column width.
-		// This applies to data cells AND to `.grid-static-col.search` filter cells
-		// through the same selector, so the filter row can never drift out of
-		// alignment with the data rows (a live bug in the app this ports).
-		// It also overrides frappe's `.grid-row > .row .col:last-child { min-width: 0 }`.
-		// Upper bound must stay >= MAX_COLUMN_WIDTH in ui/grid_enhancer.js, which
-		// rejects any single column wider than that in Configure Columns. Upstream
-		// could never exceed 10 (its total cap was 10); the raised budget can.
+		// col-xs-N -> a pixel width. Percentages cannot be used here: the row above is
+		// `max-content`, and a percentage against a max-content containing block is
+		// treated as auto during intrinsic sizing, which would collapse every column to
+		// its text width.
+		//
+		// `--grey-cw-N` is written per grid by apply_column_widths() in
+		// ui/grid_enhancer.js: it scales Frappe's own N/12 proportion to the live
+		// container so a table that fits still looks exactly like stock, and falls back
+		// to the floor below once the columns no longer fit, which is what makes the
+		// grid scroll (and therefore what makes pinning meaningful) on a narrow screen.
+		// The fallback keeps this file sane on its own.
+		//
+		// The same selector covers data cells AND `.grid-static-col.search` filter
+		// cells, so the filter row can never drift out of alignment with the data rows
+		// (a live bug in the app this ports). It also beats frappe's
+		// `.grid-row > .row .col:last-child { min-width: 0 }`.
+		// Upper bound must stay >= MAX_COLUMN_WIDTH in ui/grid_enhancer.js.
 		@for $i from 1 through 20 {
-			$grey-col-width: calc(var(--grey-grid-min-col-width, 100px) * #{($i + 1) * 0.5});
+			$grey-floor: calc(var(--grey-grid-min-col-width, 100px) * #{($i + 1) * 0.5});
 
-			// width == min-width == max-width, and NO flex-grow. Grow is what broke
-			// alignment before: free space is shared between the flexible cells of
-			// each row independently, so any per-row difference in the fixed cells
-			// (the gear on the heading row vs the edit button on a data row) grows
-			// into visible drift across the columns. A grid only reaches these rules
-			// when it is already wider than the container (see .grey-grid-wide), so
-			// there is no free space to distribute anyway.
 			.data-row.row > .col.col-xs-#{$i} {
-				flex: 0 0 $grey-col-width;
-				width: $grey-col-width;
-				min-width: $grey-col-width;
-				max-width: $grey-col-width;
+				flex: 0 0 auto;
+				width: var(--grey-cw-#{$i}, #{$grey-floor});
+				min-width: var(--grey-cw-#{$i}, #{$grey-floor});
+				max-width: var(--grey-cw-#{$i}, #{$grey-floor});
 			}
 		}
 
