@@ -1,0 +1,30 @@
+<div class="split-view-container">
+	<div class="split-view-body">
+		<div class="split-view-list" id="split-view-list">
+			<!-- list view is rendered here -->
+		</div>
+		<div class="grey-split-view-splitter" role="separator" aria-orientation="vertical">
+			<button type="button"
+				class="btn btn-default btn-xs split-view-reset-pane"
+				title="{{ __("Reset the split to its default width") }}"
+				aria-label="{{ __("Reset the split to its default width") }}">
+				<svg class="icon icon-xs" aria-hidden="true">
+					<use href="#es-line-header-column"></use>
+				</svg>
+			</button>
+		</div>
+		<div class="split-view-form" id="split-view-form">
+			<div class="split-view-form-empty" id="split-view-form-empty">
+				<div class="empty-state-content">
+					<div class="empty-icon">
+						<svg class="icon icon-xl" aria-hidden="true">
+							<use href="#icon-select"></use>
+						</svg>
+					</div>
+					<div class="empty-title">{{ __("No record selected") }}</div>
+					<div class="empty-hint">{{ __("Click a row in the list to view and edit its details here.") }}</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>

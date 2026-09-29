@@ -12,9 +12,21 @@ app_license = "mit"
 ##update
 
 # include js, css files in header of desk.html
-app_include_css = "/assets/grey_theme/css/theme.css"
+app_include_css = [
+	"/assets/grey_theme/css/theme.css",
+	"grey_theme_grid.bundle.css",
+	"grey_theme_split_view.bundle.css",
+]
 # app_include_js = "/assets/grey_theme/js/grey_theme.js"
-app_include_js = ["/assets/grey_theme/js/suspension_check.js"]
+app_include_js = [
+	"/assets/grey_theme/js/suspension_check.js",
+	"grey_theme_ui.bundle.js",
+]
+
+# Boot
+# ----
+# publish the Grey Theme UI settings to the desk as frappe.boot.grey_theme_ui
+extend_bootinfo = ["grey_theme.boot.extend_bootinfo"]
 
 # include js, css files in header of web template
 web_include_css = [

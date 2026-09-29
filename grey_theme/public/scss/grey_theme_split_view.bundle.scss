@@ -1,0 +1,400 @@
+// Copyright (c) 2026, Enfono Technologies and contributors
+//
+// Split View stylesheet.
+//
+// Everything is nested under `body.grey-ui-split`, which the Split View JS only
+// adds when the feature is enabled in Grey Theme UI Settings. With the feature
+// off, not a single rule in this file matches anything.
+//
+// The pane split is driven by two custom properties that the JS writes onto
+// #page-split_view from the settings:
+//   --grey-split-list-width  list pane width (a % default, or px while dragging)
+//   --grey-split-min-width   minimum pane width when dragging
+
+body.grey-ui-split {
+	&.split-view-active {
+		.navbar > .container {
+			max-width: 100%;
+			width: 100%;
+			padding-left: var(--padding-md);
+			padding-right: var(--padding-md);
+		}
+	}
+
+	&.split-view-resizing {
+		cursor: col-resize !important;
+		user-select: none;
+	}
+
+	#page-split_view {
+		// fallbacks - the JS overwrites both from the settings
+		--grey-split-list-width: 50%;
+		--grey-split-min-width: 280px;
+
+		.split-view-container {
+			display: flex;
+			flex-direction: column;
+			width: 100%;
+			height: 100%;
+			background: var(--bg-color);
+		}
+
+		.split-view-body {
+			display: flex;
+			flex-direction: row;
+			flex: 1;
+			overflow: hidden;
+			min-height: 400px;
+		}
+
+		.page-body.container {
+			width: 100%;
+			max-width: 100%;
+			padding-left: 0;
+			padding-right: 0;
+		}
+
+		> .page-head {
+			margin-bottom: 0;
+			border-bottom: 1px solid var(--border-color);
+			z-index: 7;
+
+			.container {
+				max-width: 100%;
+				width: 100%;
+				padding-left: var(--padding-md);
+				padding-right: var(--padding-md);
+			}
+
+			.page-head-content {
+				padding-left: 0;
+				padding-right: 0;
+			}
+		}
+
+		.layout-main-section {
+			padding: 0;
+			border: none;
+			box-shadow: none;
+			background: transparent;
+		}
+
+		/* ------------------------------------------------------- list pane */
+
+		.split-view-list {
+			flex: none;
+			width: var(--grey-split-list-width);
+			min-width: var(--grey-split-min-width);
+			max-width: 75%;
+			height: 100%;
+			overflow-y: auto;
+			overflow-x: hidden;
+			background: var(--card-bg);
+
+			> .page-head {
+				display: none !important;
+			}
+
+			> .container.page-body {
+				width: 100%;
+				max-width: 100%;
+				padding: 0;
+			}
+
+			.layout-side-section {
+				display: none !important;
+			}
+
+			.layout-main-section {
+				padding: 0;
+				border: none;
+				box-shadow: none;
+				min-height: auto;
+			}
+
+			.frappe-list {
+				padding: 0 var(--padding-xs);
+			}
+
+			.page-form {
+				margin: 0;
+				padding: var(--padding-xs);
+				display: flex;
+				flex-wrap: wrap;
+				background-color: var(--card-bg);
+				border-bottom: 1px solid var(--border-color);
+
+				.form-group {
+					padding: 0 5px;
+					margin: 5px 0;
+				}
+
+				.checkbox {
+					margin-top: 4px;
+					margin-bottom: 4px;
+
+					.help-box {
+						display: none;
+					}
+				}
+
+				.standard-filter-section {
+					display: flex;
+					flex-wrap: wrap;
+					flex: 1;
+					width: 100%;
+					gap: 0;
+
+					.form-group,
+					.frappe-control {
+						min-width: 150px;
+						margin-bottom: 0;
+					}
+
+					> .frappe-control,
+					> div[class*="col-"] {
+						flex: 1 1 150px;
+						max-width: 220px;
+						width: auto;
+						padding: 0 5px;
+						margin: 5px 0;
+					}
+				}
+
+				.filter-section {
+					display: flex;
+					flex-wrap: wrap;
+					align-items: center;
+					width: 100%;
+					padding: 0 var(--padding-xs);
+				}
+
+				.filter-selector .btn-group {
+					margin: var(--margin-xs);
+
+					.filter-label {
+						display: inline-block;
+						font-weight: 600;
+						color: var(--text-color);
+						background-color: var(--control-bg);
+						min-width: 21px;
+						border-radius: 22px;
+					}
+				}
+
+				.filter-button.btn-primary-light {
+					z-index: 1;
+				}
+
+				.sort-selector .btn-group {
+					margin: var(--margin-xs) 0 var(--margin-xs) var(--margin-xs);
+				}
+			}
+
+			.result,
+			.freeze,
+			.no-result {
+				min-height: auto !important;
+			}
+
+			.list-row-container {
+				padding: 0;
+			}
+
+			.list-row-border {
+				margin: 0 var(--padding-xs);
+			}
+
+			.list-row {
+				padding: var(--padding-xs) var(--padding-sm);
+				border-radius: 0;
+				transition: background-color 0.12s ease;
+
+				&:hover {
+					background-color: var(--highlight-color);
+				}
+
+				&.split-view-selected {
+					background-color: var(--control-bg);
+					box-shadow: inset 3px 0 0 var(--primary);
+				}
+			}
+
+			.list-paging-area {
+				border-top: 1px solid var(--border-color);
+				background: var(--card-bg);
+			}
+		}
+
+		/* -------------------------------------------------------- splitter */
+
+		.grey-split-view-splitter {
+			flex: 0 0 8px;
+			width: 8px;
+			min-width: 8px;
+			cursor: col-resize;
+			background: var(--border-color);
+			position: relative;
+			z-index: 10;
+			flex-shrink: 0;
+			transition: background-color 0.15s ease;
+
+			&::after {
+				content: "";
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				width: 2px;
+				height: 32px;
+				border-radius: 2px;
+				background: var(--gray-400);
+				opacity: 0.6;
+			}
+
+			&:hover,
+			&:active {
+				background: var(--gray-300);
+
+				&::after {
+					opacity: 1;
+					background: var(--primary);
+				}
+			}
+
+			.split-view-reset-pane {
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				z-index: 11;
+				width: 22px;
+				height: 22px;
+				padding: 0;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				cursor: pointer;
+				box-shadow: var(--shadow-sm);
+				opacity: 0.9;
+
+				&:hover,
+				&:focus {
+					opacity: 1;
+				}
+			}
+		}
+
+		/* ------------------------------------------------------- form pane */
+
+		.split-view-form {
+			flex: 1 1 auto;
+			min-width: 0;
+			height: 100%;
+			overflow-y: auto;
+			overflow-x: hidden;
+			background: var(--bg-color);
+			position: relative;
+
+			.layout-side-section {
+				display: none !important;
+			}
+
+			.page-head .standard-actions .prev-doc,
+			.page-head .standard-actions .next-doc {
+				display: none !important;
+			}
+
+			.page-head {
+				position: sticky;
+				top: 0;
+				z-index: 5;
+				margin-bottom: 0;
+				border-bottom: 1px solid var(--border-color);
+				background: var(--card-bg);
+			}
+
+			.form-layout,
+			.form-page {
+				max-width: 100%;
+			}
+
+			.form-page {
+				padding: var(--padding-sm) var(--padding-md);
+			}
+
+			.form-tabs-list {
+				position: sticky;
+				top: 0;
+				z-index: 4;
+				background: var(--card-bg);
+			}
+		}
+
+		.split-view-form-host {
+			min-height: 100%;
+		}
+
+		.split-view-form-loading {
+			padding: var(--padding-xl);
+		}
+
+		/* ----------------------------------------------------- empty states */
+
+		.split-view-form-empty,
+		.split-view-off-state {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			height: 100%;
+			min-height: 300px;
+			width: 100%;
+			background: var(--subtle-fg);
+			color: var(--text-muted);
+		}
+
+		.split-view-form-empty .empty-state-content {
+			text-align: center;
+			padding: var(--padding-xl);
+			max-width: 320px;
+
+			.empty-icon {
+				font-size: 48px;
+				margin-bottom: var(--margin-md);
+				opacity: 0.35;
+				color: var(--gray-500);
+			}
+
+			.empty-title {
+				font-size: var(--text-lg);
+				font-weight: var(--weight-semibold);
+				color: var(--text-color);
+				margin-bottom: var(--margin-xs);
+			}
+
+			.empty-hint {
+				font-size: var(--text-sm);
+				line-height: 1.5;
+			}
+		}
+
+		.split-view-off-state .msg-box {
+			max-width: 360px;
+
+			.off-state-title {
+				font-size: var(--text-lg);
+				font-weight: var(--weight-semibold);
+				color: var(--text-color);
+				margin-bottom: var(--margin-xs);
+			}
+
+			.off-state-action:empty {
+				display: none;
+			}
+		}
+
+		.split-view-form.has-doc .split-view-form-empty {
+			display: none;
+		}
+	}
+}

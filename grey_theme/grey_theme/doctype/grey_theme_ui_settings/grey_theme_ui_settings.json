@@ -1,0 +1,140 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-09-29 09:14:22.610338",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_features",
+  "enable_grid_enhancer",
+  "enable_split_view",
+  "section_break_grid",
+  "grid_column_limit",
+  "grid_min_column_width",
+  "column_break_grid",
+  "grid_sticky_columns",
+  "grid_max_sticky_columns",
+  "section_break_split",
+  "split_view_list_width_pct",
+  "split_view_min_pane_width",
+  "column_break_split",
+  "split_view_hide_page_from_search",
+  "split_view_excluded_doctypes"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_features",
+   "fieldtype": "Section Break",
+   "label": "Features"
+  },
+  {
+   "default": "0",
+   "description": "Adds horizontal scrolling, wider column budget and pinnable (sticky) columns to child tables.",
+   "fieldname": "enable_grid_enhancer",
+   "fieldtype": "Check",
+   "label": "Enable Grid Enhancer"
+  },
+  {
+   "default": "0",
+   "description": "Adds a Split View option to list views: list on the left, the selected document on the right.",
+   "fieldname": "enable_split_view",
+   "fieldtype": "Check",
+   "label": "Enable Split View"
+  },
+  {
+   "depends_on": "eval:doc.enable_grid_enhancer",
+   "fieldname": "section_break_grid",
+   "fieldtype": "Section Break",
+   "label": "Grid Enhancer Options"
+  },
+  {
+   "default": "60",
+   "description": "Total column units rendered in one child table row. Frappe's built-in limit is 11.",
+   "fieldname": "grid_column_limit",
+   "fieldtype": "Int",
+   "label": "Column Budget Per Row"
+  },
+  {
+   "default": "100",
+   "fieldname": "grid_min_column_width",
+   "fieldtype": "Int",
+   "label": "Minimum Column Width (px)"
+  },
+  {
+   "fieldname": "column_break_grid",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Lets users pin columns from the grid's Configure Columns dialog.",
+   "fieldname": "grid_sticky_columns",
+   "fieldtype": "Check",
+   "label": "Allow Sticky Columns"
+  },
+  {
+   "default": "3",
+   "depends_on": "eval:doc.grid_sticky_columns",
+   "fieldname": "grid_max_sticky_columns",
+   "fieldtype": "Int",
+   "label": "Maximum Sticky Columns"
+  },
+  {
+   "depends_on": "eval:doc.enable_split_view",
+   "fieldname": "section_break_split",
+   "fieldtype": "Section Break",
+   "label": "Split View Options"
+  },
+  {
+   "default": "50",
+   "fieldname": "split_view_list_width_pct",
+   "fieldtype": "Int",
+   "label": "Default List Pane Width (%)"
+  },
+  {
+   "default": "280",
+   "fieldname": "split_view_min_pane_width",
+   "fieldtype": "Int",
+   "label": "Minimum Pane Width (px)"
+  },
+  {
+   "fieldname": "column_break_split",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Keeps the raw Split View page out of the awesome bar; it is only reachable from a list view.",
+   "fieldname": "split_view_hide_page_from_search",
+   "fieldtype": "Check",
+   "label": "Hide Split View Page From Search"
+  },
+  {
+   "description": "One DocType per line. Split View will not be offered in these list views.",
+   "fieldname": "split_view_excluded_doctypes",
+   "fieldtype": "Small Text",
+   "label": "Excluded DocTypes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-09-29 09:14:22.610338",
+ "modified_by": "Administrator",
+ "module": "Grey Theme",
+ "name": "Grey Theme UI Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
