@@ -1,0 +1,99 @@
+{
+ "actions": [],
+ "creation": "2026-11-26 20:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "case",
+  "question",
+  "passed",
+  "failures",
+  "tools_used",
+  "duration_s",
+  "model",
+  "conversation",
+  "answer"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "case",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Case",
+   "options": "Fateh AI Eval Case"
+  },
+  {
+   "columns": 3,
+   "fieldname": "question",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Question",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "passed",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Passed",
+   "read_only": 1
+  },
+  {
+   "columns": 3,
+   "fieldname": "failures",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Why It Failed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tools_used",
+   "fieldtype": "Small Text",
+   "label": "Tools Used",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "duration_s",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Seconds",
+   "precision": "1",
+   "read_only": 1
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Model",
+   "read_only": 1
+  },
+  {
+   "fieldname": "conversation",
+   "fieldtype": "Link",
+   "label": "Conversation",
+   "options": "Fateh AI Conversation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "answer",
+   "fieldtype": "Code",
+   "label": "Answer",
+   "options": "Markdown",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-26 20:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Grey Theme",
+ "name": "Fateh AI Eval Result",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

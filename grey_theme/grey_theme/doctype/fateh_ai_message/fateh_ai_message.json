@@ -1,0 +1,153 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-11-26 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "conversation",
+  "role",
+  "run_id",
+  "column_break_msg",
+  "model",
+  "input_tokens",
+  "output_tokens",
+  "is_error",
+  "content_section",
+  "content",
+  "blocks",
+  "steps",
+  "feedback_section",
+  "feedback",
+  "column_break_feedback",
+  "feedback_note"
+ ],
+ "fields": [
+  {
+   "fieldname": "conversation",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Conversation",
+   "options": "Fateh AI Conversation",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "role",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Role",
+   "options": "user\nassistant\ntool",
+   "reqd": 1
+  },
+  {
+   "fieldname": "run_id",
+   "fieldtype": "Data",
+   "label": "Run ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_msg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Model",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "input_tokens",
+   "fieldtype": "Int",
+   "label": "Input Tokens",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "output_tokens",
+   "fieldtype": "Int",
+   "label": "Output Tokens",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_error",
+   "fieldtype": "Check",
+   "label": "Is Error",
+   "read_only": 1
+  },
+  {
+   "fieldname": "content_section",
+   "fieldtype": "Section Break",
+   "label": "Content"
+  },
+  {
+   "fieldname": "content",
+   "fieldtype": "Code",
+   "label": "Content",
+   "options": "Markdown",
+   "read_only": 1
+  },
+  {
+   "fieldname": "blocks",
+   "fieldtype": "Code",
+   "label": "Model Blocks (JSON)",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "steps",
+   "fieldtype": "Code",
+   "label": "Tool Steps (JSON)",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "feedback_section",
+   "fieldtype": "Section Break",
+   "label": "Feedback"
+  },
+  {
+   "fieldname": "feedback",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Feedback",
+   "options": "\nGood\nBad",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_feedback",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "feedback_note",
+   "fieldtype": "Small Text",
+   "label": "Feedback Note",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-26 20:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Grey Theme",
+ "name": "Fateh AI Message",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

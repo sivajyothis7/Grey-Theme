@@ -23,6 +23,47 @@ excluded from it.
 Full settings reference, install/upgrade steps, and the manual QA checklist:
 [docs/ui-features.md](docs/ui-features.md).
 
+## Fateh AI assistant
+
+A read-only ERP assistant, off until **AI Settings → Enabled** is ticked.
+
+- **Any provider**: Groq, OpenAI, Anthropic Claude, Google Gemini, DeepSeek, OpenRouter,
+  Ollama or any OpenAI-compatible endpoint. Keys are stored encrypted. A fallback model list
+  takes over when a provider retires a model. *Test Connection* and *Fetch Models* buttons
+  are on the settings form.
+- **Tools instead of generated SQL**: the model looks up DocTypes and fields, searches,
+  counts, totals and groups records, reads documents, finds IDs by name, and runs reports.
+  It also has stock balance and outstanding-invoice helpers. Every tool runs as the asking
+  user, with roles, User Permissions and field-level permissions applied. There are no
+  write tools.
+- **Chat UI**:
+  - streamed answers with a Stop button, and tool steps you can open to see each query and
+    its rows;
+  - markdown tables you can sort, copy or download as CSV, and inline charts;
+  - document links that open in the desk;
+  - saved, searchable chat history;
+  - voice input, dark mode and RTL support.
+- **Everywhere in the desk**: a floating launcher and Ctrl+I open a side drawer that knows
+  the current form, list (including selected rows) or report. A full page lives at
+  `/app/ai-chat`.
+- **Governance**: optional role allow-list and per-user daily limit. Every tool call is
+  written to **Fateh AI Audit Log**, which Log Settings prunes after 90 days. Raw SQL is off
+  by default, and when enabled it is available to System Managers only.
+
+- **Report guide**: asked which report to use, it names the report, says what it shows and
+  which filters matter, and gives a button that opens the report with those filters filled in.
+  Descriptions come from, in order: the site's own notes (**AI Settings → Report Guide**), apps
+  that register `fateh_ai_report_guide` in hooks.py (a function returning
+  `{"Report": {"purpose", "key_filters", "keywords"}}`), a built-in guide to the common ERPNext
+  reports, and finally the report's own code docstring.
+- **Accuracy loop**: 👍 / 👎 on every answer (👎 asks what was wrong) — review them under
+  *AI Bad Answers*. **Fateh AI Eval Case** holds test questions with checks (tools that must be
+  used, text the answer must / must not contain); *AI Settings → Accuracy → Run Accuracy Tests*
+  asks them all through the real assistant in the background and scores each answer
+  (**Fateh AI Eval Run**). Test chats stay out of users' history and daily limits.
+
+Design and security model: [docs/fateh-ai-v2-design.md](docs/fateh-ai-v2-design.md).
+
 #### License
 
 mit

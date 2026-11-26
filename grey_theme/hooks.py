@@ -16,16 +16,18 @@ app_include_css = [
 	"/assets/grey_theme/css/theme.css",
 	"grey_theme_grid.bundle.css",
 	"grey_theme_split_view.bundle.css",
+	"fateh_ai.bundle.css",
 ]
 # app_include_js = "/assets/grey_theme/js/grey_theme.js"
 app_include_js = [
 	"/assets/grey_theme/js/suspension_check.js",
 	"grey_theme_ui.bundle.js",
+	"fateh_ai.bundle.js",
 ]
 
 # Boot
 # ----
-# publish the Grey Theme UI settings to the desk as frappe.boot.grey_theme_ui
+# publish frappe.boot.grey_theme_ui (UI settings) and frappe.boot.fateh_ai (assistant switch)
 extend_bootinfo = ["grey_theme.boot.extend_bootinfo"]
 
 # include js, css files in header of web template
@@ -256,7 +258,8 @@ after_request = ["grey_theme.suspension_api.force_redirect_after_request"]
 # Automatically update python controller files with type annotations for this app.
 # export_python_type_annotations = True
 
-# default_log_clearing_doctypes = {
-# 	"Logging DocType Name": 30  # days to retain logs
-# }
+# Fateh AI tool-call audit trail, pruned by Log Settings
+default_log_clearing_doctypes = {
+	"Fateh AI Audit Log": 90,
+}
 

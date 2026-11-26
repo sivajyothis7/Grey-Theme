@@ -5,6 +5,30 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "assistant_section",
+  "enabled",
+  "assistant_name",
+  "show_launcher",
+  "column_break_assistant",
+  "allowed_roles",
+  "daily_message_limit",
+  "model_section",
+  "provider",
+  "api_key",
+  "base_url",
+  "model",
+  "fallback_models",
+  "column_break_model",
+  "temperature",
+  "max_output_tokens",
+  "max_iterations",
+  "request_timeout",
+  "behaviour_section",
+  "extra_instructions",
+  "enable_sql_tool",
+  "report_guide_section",
+  "report_notes",
+  "legacy_section",
   "default_provider",
   "deepseek_api_key",
   "column_break_hnsl",
@@ -12,14 +36,168 @@
  ],
  "fields": [
   {
+   "fieldname": "assistant_section",
+   "fieldtype": "Section Break",
+   "label": "Assistant"
+  },
+  {
+   "default": "0",
+   "description": "Master switch. While off, the assistant page shows a notice and no launcher is shown.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "default": "Fateh AI",
+   "fieldname": "assistant_name",
+   "fieldtype": "Data",
+   "label": "Assistant Name"
+  },
+  {
+   "default": "1",
+   "description": "Show the floating assistant button on every desk page. Ctrl+I opens it too.",
+   "fieldname": "show_launcher",
+   "fieldtype": "Check",
+   "label": "Show Floating Launcher"
+  },
+  {
+   "fieldname": "column_break_assistant",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Leave empty to allow every desk (System) user. The assistant always answers with the asking user's own permissions.",
+   "fieldname": "allowed_roles",
+   "fieldtype": "Table MultiSelect",
+   "label": "Allowed Roles",
+   "options": "Fateh AI Allowed Role"
+  },
+  {
+   "default": "100",
+   "description": "Questions per user per day. 0 = unlimited.",
+   "fieldname": "daily_message_limit",
+   "fieldtype": "Int",
+   "label": "Daily Message Limit Per User",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "model_section",
+   "fieldtype": "Section Break",
+   "label": "Model"
+  },
+  {
+   "default": "Groq",
+   "fieldname": "provider",
+   "fieldtype": "Select",
+   "label": "Provider",
+   "options": "Groq\nOpenAI\nAnthropic\nGoogle Gemini\nDeepSeek\nOpenRouter\nOllama\nCustom (OpenAI-compatible)"
+  },
+  {
+   "fieldname": "api_key",
+   "fieldtype": "Password",
+   "label": "API Key",
+   "length": 512
+  },
+  {
+   "description": "Optional. Overrides the provider's default endpoint, e.g. http://localhost:11434/v1 for Ollama. Required for Custom.",
+   "fieldname": "base_url",
+   "fieldtype": "Data",
+   "label": "Base URL"
+  },
+  {
+   "description": "Model id. Leave empty for the provider default where one exists (Groq: openai/gpt-oss-120b, Anthropic: claude-sonnet-5-5). Use Fetch Models to see what your key can use.",
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Model"
+  },
+  {
+   "description": "One model id per line. Tried in order when the main model is retired or unavailable (404 / model_not_found).",
+   "fieldname": "fallback_models",
+   "fieldtype": "Small Text",
+   "label": "Fallback Models"
+  },
+  {
+   "fieldname": "column_break_model",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0.2",
+   "fieldname": "temperature",
+   "fieldtype": "Float",
+   "label": "Temperature",
+   "precision": "2"
+  },
+  {
+   "default": "4096",
+   "fieldname": "max_output_tokens",
+   "fieldtype": "Int",
+   "label": "Max Output Tokens",
+   "non_negative": 1
+  },
+  {
+   "default": "8",
+   "description": "Maximum lookups (tool calls) per question before the assistant must answer.",
+   "fieldname": "max_iterations",
+   "fieldtype": "Int",
+   "label": "Max Tool Steps Per Question",
+   "non_negative": 1
+  },
+  {
+   "default": "90",
+   "description": "Seconds to wait for one model response.",
+   "fieldname": "request_timeout",
+   "fieldtype": "Int",
+   "label": "Request Timeout (s)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "behaviour_section",
+   "fieldtype": "Section Break",
+   "label": "Behaviour"
+  },
+  {
+   "description": "Company-specific guidance added to the assistant's instructions, e.g. \"Branches are tracked in the Cost Center field.\"",
+   "fieldname": "extra_instructions",
+   "fieldtype": "Small Text",
+   "label": "Extra Instructions"
+  },
+  {
+   "default": "0",
+   "description": "Warning: raw SQL bypasses User Permissions. Only System Managers get this tool, and only SELECT is allowed. Leave off unless you need it.",
+   "fieldname": "enable_sql_tool",
+   "fieldtype": "Check",
+   "label": "Allow Read-only SQL for System Managers"
+  },
+  {
+   "fieldname": "report_guide_section",
+   "fieldtype": "Section Break",
+   "label": "Report Guide",
+   "collapsible": 1,
+   "description": "Describe this site's own reports so the assistant can recommend them. Built-in descriptions cover the common ERPNext reports; custom reports are otherwise described from their code."
+  },
+  {
+   "fieldname": "report_notes",
+   "fieldtype": "Table",
+   "label": "Report Notes",
+   "options": "Fateh AI Report Note"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "legacy_section",
+   "fieldtype": "Section Break",
+   "hidden": 1,
+   "label": "Legacy (v1)"
+  },
+  {
    "fieldname": "default_provider",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Default Provider",
    "options": "\nGroq\nDeepSeek"
   },
   {
    "fieldname": "deepseek_api_key",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "DeepSeek API Key"
   },
   {
@@ -29,13 +207,14 @@
   {
    "fieldname": "groq_api_key",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Groq API Key"
   }
  ],
- "index_web_pages_for_search": 1,
+ "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2025-10-31 11:33:56.531172",
+ "modified": "2026-11-26 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Grey Theme",
  "name": "AI Settings",
