@@ -15,11 +15,21 @@ frappe.pages["ai-chat"].on_page_load = function (wrapper) {
 
 	const ChatApp = window.grey_theme && grey_theme.fateh_ai && grey_theme.fateh_ai.ChatApp;
 	if (!ChatApp) {
-		$(page.body).append(
-			$("<div class='text-muted text-center' style='padding: 40px'>").text(
-				__("The assistant files are not built on this site. Ask your administrator to run bench build --app grey_theme.")
+		// Usually a desk tab opened before the assistant was installed/updated: its script list
+		// is from the old build. A reload fetches the new one.
+		const box = $("<div class='text-center' style='padding: 48px 16px'>");
+		box.append($("<p class='text-muted'>").text(__("The assistant was updated. Reload the page to load it.")));
+		box.append(
+			$("<button class='btn btn-primary btn-sm'>")
+				.text(__("Reload"))
+				.on("click", () => window.location.reload())
+		);
+		box.append(
+			$("<p class='text-muted small' style='margin-top: 16px'>").text(
+				__("If this keeps showing, ask your administrator to run: bench build --app grey_theme")
 			)
 		);
+		$(page.body).append(box);
 		return;
 	}
 

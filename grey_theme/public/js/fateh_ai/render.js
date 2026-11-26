@@ -118,6 +118,8 @@ export function render_markdown(text, { streaming = false } = {}) {
 // --------------------------------------------------------------------------- charts
 
 const CHART_TYPES = new Set(["bar", "line", "pie", "donut", "percentage"]);
+// teal / slate family that matches the Grey Theme accent, then warm contrasts
+const CHART_COLORS = ["#0f8a8f", "#5b6b82", "#38b2ac", "#a3b1c2", "#e0a43b", "#8b6fd6", "#e06c75", "#4c9be8"];
 
 export function parse_chart(code) {
 	let spec;
@@ -157,6 +159,7 @@ function render_charts(root) {
 				type: spec.type,
 				height: 240,
 				data: { labels: spec.labels, datasets: spec.datasets },
+				colors: CHART_COLORS,
 				axisOptions: { xIsSeries: spec.type === "line" ? 1 : 0, shortenYAxisNumbers: 1 },
 				tooltipOptions: { formatTooltipY: (d) => (typeof d === "number" ? nice_number(d) : d) },
 				truncateLegends: 1,
@@ -283,6 +286,11 @@ export function enhance_table(table, title) {
 	}
 }
 
+function pretty_column(name) {
+	const text = String(name).replace(/__/g, " · ").replace(/_/g, " ").trim();
+	return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 export function build_preview_table(preview) {
 	const frag = document.createDocumentFragment();
 	if (!preview || !preview.columns || !preview.columns.length) return frag;
@@ -290,7 +298,8 @@ export function build_preview_table(preview) {
 	const hr = table.createTHead().insertRow();
 	preview.columns.forEach((c) => {
 		const th = document.createElement("th");
-		th.textContent = String(c);
+		th.textContent = pretty_column(c);
+		th.title = String(c);
 		hr.append(th);
 	});
 	const tbody = table.createTBody();

@@ -49,6 +49,36 @@ function step_status_icon(status) {
 	return s;
 }
 
+// Tools whose row count is meaningful even when it is zero ("no matching records").
+const ROW_TOOLS = new Set([
+	"search_records", "aggregate", "run_report", "stock_balance", "party_outstanding",
+	"run_sql_select", "search_link", "find_doctype", "list_reports",
+]);
+
+function short_value(v) {
+	if (v === null || v === undefined) return "";
+	const text = typeof v === "string" ? v : JSON.stringify(v);
+	return text.length > 220 ? text.slice(0, 220) + "…" : text;
+}
+
+// Tool arguments as a readable key/value list instead of raw JSON.
+function build_args(args) {
+	if (!args || typeof args !== "object" || !Object.keys(args).length) return null;
+	const dl = document.createElement("dl");
+	dl.className = "fai-kv";
+	Object.entries(args).forEach(([k, v]) => {
+		if (v === null || v === undefined || v === "" || (Array.isArray(v) && !v.length)) return;
+		const dt = document.createElement("dt");
+		dt.textContent = k.replace(/_/g, " ");
+		const dd = document.createElement("dd");
+		const code = document.createElement("code");
+		code.textContent = short_value(v);
+		dd.append(code);
+		dl.append(dt, dd);
+	});
+	return dl.children.length ? dl : null;
+}
+
 // --------------------------------------------------------------------------------------------
 // One assistant answer: ordered text segments and tool-step groups.
 // --------------------------------------------------------------------------------------------
@@ -61,6 +91,7 @@ class BotTurn {
 		this.cur = null;
 		this.steps_el = null;
 		this.steps = {};
+		this.groups = [];
 		this.render_timer = null;
 		this.done = false;
 
@@ -132,13 +163,49 @@ class BotTurn {
 		this.steps_el = null;
 	}
 
-	ensure_steps_el() {
+	ensure_steps_el(open = true) {
 		if (!this.steps_el) {
-			this.steps_el = document.createElement("div");
-			this.steps_el.className = "fai-steps";
-			this.body.append(this.steps_el);
+			const group = document.createElement("details");
+			group.className = "fai-steps";
+			group.open = open;
+			const sum = document.createElement("summary");
+			sum.className = "fai-steps-sum";
+			const ico = document.createElement("span");
+			ico.className = "fai-steps-ico";
+			const label = document.createElement("span");
+			label.className = "fai-steps-label";
+			sum.append(ico, label, icon_el("down", "fai-steps-chev"));
+			const list = document.createElement("div");
+			list.className = "fai-steps-list";
+			group.append(sum, list);
+			this.body.append(group);
+			this.steps_el = { group, list, ico, label, ids: [] };
+			this.groups.push(this.steps_el);
 		}
 		return this.steps_el;
+	}
+
+	refresh_group(g) {
+		const steps = g.ids.map((id) => this.steps[id]).filter(Boolean);
+		const running = steps.some((s) => s.el.dataset.status === "running");
+		const issues = steps.filter((s) => ["Denied", "Error"].includes(s.el.dataset.status)).length;
+		const ms = steps.reduce((t, s) => t + (s.duration_ms || 0), 0);
+		g.group.dataset.state = running ? "running" : issues ? "issues" : "done";
+		if (running) {
+			const s = document.createElement("span");
+			s.className = "fai-spinner";
+			g.ico.replaceChildren(s);
+			g.label.textContent = __("Looking things up…");
+			return;
+		}
+		g.ico.replaceChildren(icon_el(issues ? "alert" : "check"));
+		let text =
+			steps.length === 1
+				? __("Used 1 lookup")
+				: __("Used {0} lookups", [steps.length]);
+		if (ms) text += ` · ${ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms"}`;
+		if (issues) text += ` · ${__("{0} not completed", [issues])}`;
+		g.label.textContent = text;
 	}
 
 	add_step(step, { final = false } = {}) {
@@ -161,17 +228,18 @@ class BotTurn {
 		const body = document.createElement("div");
 		body.className = "fai-step-body";
 		d.append(body);
-		const args = step.args && Object.keys(step.args).length ? JSON.stringify(step.args, null, 2) : "";
-		if (args) {
-			const pre = document.createElement("pre");
-			pre.className = "fai-step-args";
-			pre.textContent = args;
-			body.append(pre);
-		}
-		this.ensure_steps_el().append(d);
-		this.steps[step.id] = { el: d, ico, meta, body, step };
+		const kv = build_args(step.args);
+		if (kv) body.append(kv);
+
+		const g = this.ensure_steps_el(!final);
+		g.list.append(d);
+		g.ids.push(step.id);
+		this.steps[step.id] = { el: d, ico, meta, body, step, group: g, duration_ms: 0 };
 		if (final) this.update_step(step);
-		else this.set_typing(__("{0}…", [step.label || step.name]));
+		else {
+			this.refresh_group(g);
+			this.set_typing(__("{0}…", [step.label || step.name]));
+		}
 		this.app.autoscroll();
 	}
 
@@ -179,10 +247,12 @@ class BotTurn {
 		const s = this.steps[ev.id];
 		if (!s) return;
 		s.el.dataset.status = ev.status;
+		s.duration_ms = ev.duration_ms || 0;
 		s.ico.replaceChildren(step_status_icon(ev.status));
 		const bits = [];
-		if (ev.status === "Success" && ev.row_count !== undefined && ev.row_count !== null) {
-			bits.push(ev.row_count === 1 ? __("1 row") : __("{0} rows", [ev.row_count]));
+		const rows = ev.row_count;
+		if (ev.status === "Success" && rows !== undefined && rows !== null && (rows > 0 || ROW_TOOLS.has(s.step.name))) {
+			bits.push(rows === 1 ? __("1 row") : __("{0} rows", [rows]));
 		}
 		if (ev.duration_ms) bits.push(ev.duration_ms >= 1000 ? `${(ev.duration_ms / 1000).toFixed(1)}s` : `${ev.duration_ms}ms`);
 		if (ev.status === "Denied") bits.push(__("not permitted"));
@@ -213,6 +283,8 @@ class BotTurn {
 			wrap.append(csv);
 			s.body.append(wrap);
 		}
+		if (!s.body.children.length) s.el.classList.add("fai-step-empty");
+		this.refresh_group(s.group);
 		if (!this.done) this.set_typing(__("Thinking…"));
 	}
 
@@ -244,6 +316,10 @@ class BotTurn {
 				s.el.dataset.status = "Error";
 				s.ico.replaceChildren(step_status_icon("Error"));
 			}
+		});
+		this.groups.forEach((g) => {
+			this.refresh_group(g);
+			g.group.open = false;
 		});
 		if (!actions || this.body.querySelector(".fai-actions")) return;
 		const text = this.segments.map((s) => s.text).join("\n\n").trim();
@@ -329,7 +405,7 @@ export class ChatApp {
 							<button type="button" class="fai-send" title="${esc(__("Send"))}">${icon("send")}</button>
 						</div>
 						<div class="fai-foot">
-							<span>${icon("lock")} ${esc(__("Read-only. Answers use your permissions and can be wrong — check important figures."))}</span>
+							<span>${icon("lock")} ${esc(__("Read-only · uses your permissions · check important figures"))}</span>
 							<span class="fai-usage"></span>
 						</div>
 					</footer>
@@ -449,9 +525,10 @@ export class ChatApp {
 			);
 			return;
 		}
-		this.$.sub.textContent = info.is_system_manager
-			? [info.provider, info.model].filter(Boolean).join(" · ")
+		this.default_sub = info.is_system_manager
+			? [__("Read-only"), info.provider, info.model].filter(Boolean).join(" · ")
 			: __("Read-only assistant");
+		this.update_header();
 		this.update_usage();
 		this.load_conversations();
 		this.show_empty();
@@ -484,6 +561,11 @@ export class ChatApp {
 		} else {
 			this.$.usage.textContent = "";
 		}
+	}
+
+	update_header() {
+		this.$.sub.textContent = this.conversation_title || this.default_sub || "";
+		this.$.sub.title = this.$.sub.textContent;
 	}
 
 	// ------------------------------------------------------------------ context (drawer only)
@@ -537,36 +619,39 @@ export class ChatApp {
 		if (ctx && ctx.view === "Form" && ctx.docname) {
 			const dt = __(ctx.doctype);
 			return [
-				__("Summarize this {0}", [dt]),
-				__("Is anything unusual or missing on {0}?", [ctx.docname]),
-				__("Show related documents for this {0}", [dt]),
-				__("How does this compare with similar {0} records?", [dt]),
+				[__("Summarize this {0}", [dt]), "doc"],
+				[__("Is anything unusual or missing on {0}?", [ctx.docname]), "alert"],
+				[__("Show related documents for this {0}", [dt]), "list"],
+				[__("How does this compare with similar {0} records?", [dt]), "chart"],
 			];
 		}
 		if (ctx && ctx.view === "List") {
 			const dt = __(ctx.doctype);
 			return [
-				ctx.selected && ctx.selected.length
-					? __("Summarize the selected {0} records", [dt])
-					: __("Summarize the {0} records in this list", [dt]),
-				__("Count {0} by status", [dt]),
-				__("Show the 10 most recent {0}", [dt]),
-				__("Chart {0} created per month this year", [dt]),
+				[
+					ctx.selected && ctx.selected.length
+						? __("Summarize the selected {0} records", [dt])
+						: __("Summarize the {0} records in this list", [dt]),
+					"list",
+				],
+				[__("Count {0} by status", [dt]), "chart"],
+				[__("Show the 10 most recent {0}", [dt]), "history"],
+				[__("Chart {0} created per month this year", [dt]), "chart"],
 			];
 		}
 		if (ctx && ctx.view === "Report") {
 			return [
-				__("Explain what the {0} report shows", [__(ctx.report)]),
-				__("Run {0} with my current filters and summarize it", [__(ctx.report)]),
+				[__("Explain what the {0} report shows", [__(ctx.report)]), "doc"],
+				[__("Run {0} with my current filters and summarize it", [__(ctx.report)]), "chart"],
 			];
 		}
 		return [
-			__("Top 10 customers by sales this fiscal year"),
-			__("Chart our sales by month this year"),
-			__("Which customers have overdue invoices?"),
-			__("Which items hold the most stock value?"),
-			__("How many Sales Orders are still to be delivered?"),
-			__("Which reports show profitability?"),
+			[__("Top 10 customers by sales this fiscal year"), "chart"],
+			[__("Chart our sales by month this year"), "chart"],
+			[__("Which customers have overdue invoices?"), "alert"],
+			[__("Which items hold the most stock value?"), "list"],
+			[__("How many Sales Orders are still to be delivered?"), "doc"],
+			[__("Which reports show profitability?"), "search"],
 		];
 	}
 
@@ -583,12 +668,17 @@ export class ChatApp {
 				<div class="fai-suggest"></div>
 			</div>`).firstElementChild;
 		const grid = box.querySelector(".fai-suggest");
-		this.suggestions().forEach((s) => {
+		this.suggestions().forEach(([text, icon_name]) => {
 			const b = document.createElement("button");
 			b.type = "button";
 			b.className = "fai-suggest-card";
-			b.textContent = s;
-			b.addEventListener("click", () => this.send(s));
+			const ico = document.createElement("span");
+			ico.className = "fai-suggest-ico";
+			ico.append(icon_el(icon_name || "sparkle"));
+			const span = document.createElement("span");
+			span.textContent = text;
+			b.append(ico, span);
+			b.addEventListener("click", () => this.send(text));
 			grid.append(b);
 		});
 		this.$.thread.replaceChildren(box);
@@ -679,7 +769,10 @@ export class ChatApp {
 				{ fieldname: "title", fieldtype: "Data", label: __("Title"), default: c.title, reqd: 1 },
 				async (v) => {
 					await call("rename_conversation", { name: c.name, title: v.title });
-					if (c.name === this.conversation) this.conversation_title = v.title;
+					if (c.name === this.conversation) {
+						this.conversation_title = v.title;
+						this.update_header();
+					}
 					this.load_conversations();
 				},
 				__("Rename chat"),
@@ -700,6 +793,7 @@ export class ChatApp {
 		this.conversation = null;
 		this.conversation_title = "";
 		this.turn = null;
+		this.update_header();
 		this.render_conversations();
 		this.show_empty();
 		this.$.input.focus();
@@ -719,6 +813,7 @@ export class ChatApp {
 		}
 		this.conversation = data.name;
 		this.conversation_title = data.title;
+		this.update_header();
 		this.is_empty_state = false;
 		this.render_messages(data.messages || []);
 		this.render_conversations();
@@ -833,6 +928,7 @@ export class ChatApp {
 		this.sending = false;
 		if (is_new) {
 			this.conversation_title = text.slice(0, 80);
+			this.update_header();
 			this.load_conversations();
 		}
 		if (this.info) this.info.used_today = (this.info.used_today || 0) + 1;
