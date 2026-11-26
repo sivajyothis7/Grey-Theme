@@ -377,7 +377,11 @@ class TestTools(FrappeTestCase):
 	def test_list_reports_understands_plain_words(self):
 		if not frappe.db.exists("Report", "Accounts Receivable"):
 			self.skipTest("ERPNext not installed")
-		res = self.run_tool("list_reports", {"keyword": "overdue customers"})
+		from grey_theme.fateh_ai import report_guide
+
+		# the site's own Report Guide notes may (rightly) rank its own reports first; test the built-in ranking
+		with patch.object(report_guide, "_site_notes", return_value={}):
+			res = self.run_tool("list_reports", {"keyword": "overdue customers"})
 		self.assertEqual(res.status, "Success", res.error)
 		first = json.loads(res.content)["reports"][0]
 		self.assertEqual(first["report"], "Accounts Receivable")
@@ -663,6 +667,7 @@ class TestAccuracyLoop(FrappeTestCase):
 		from grey_theme.fateh_ai.evals import evaluate, normalize
 
 		self.assertEqual(normalize("1,234.500 OMR ‑ Due 2026‑10‑01"), "1234.500 omr - due 2026-10-01")
+		self.assertEqual(normalize("I can’t create it"), "i can't create it")
 		case = {
 			"expect_tools": "party_outstanding|run_report\nsearch_link",
 			"must_include": "21.0\nSTEEL FORCE INTERNATIONAL SPC|SFI",

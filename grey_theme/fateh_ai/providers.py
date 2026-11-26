@@ -37,7 +37,7 @@ from frappe import _
 from frappe.utils import cint, cstr
 
 ANTHROPIC_VERSION = "2023-06-01"
-MAX_RETRY_WAIT = 30  # seconds; a rate-limit wait longer than this moves on to the next model
+MAX_RETRY_WAIT = 65  # seconds; Groq's free tier asks for up to ~60 s; longer waits move on to the next model
 RETRY_STATUSES = {408, 409, 425, 429, 500, 502, 503, 504, 529}
 MODEL_GONE_CODES = ("model_not_found", "model_decommissioned", "not_found_error")
 RETRY_CODES = ("tool_use_failed",)
