@@ -130,6 +130,17 @@ class TestProviders(FrappeTestCase):
 				list(providers.stream_chat(make_settings(models=["only"]), messages=[], system="s", should_stop=lambda: True))
 		sleep.assert_not_called()
 
+	def test_malformed_tool_call_is_retried(self):
+		bad = FakeResponse(
+			status=400,
+			body={"error": {"message": "Failed to parse tool call arguments as JSON", "code": "tool_use_failed"}},
+		)
+		ok = FakeResponse(lines=sse({"choices": [{"delta": {"content": "OK"}, "finish_reason": "stop"}]}, "[DONE]"))
+		with patch.object(providers.requests, "post", side_effect=[bad, ok]) as post, patch.object(providers.time, "sleep"):
+			events = list(providers.stream_chat(make_settings(models=["only"]), messages=[], system="s"))
+		self.assertEqual(post.call_count, 2)
+		self.assertEqual("".join(e["text"] for e in events if e["type"] == "text"), "OK")
+
 	def test_bad_key_is_not_retried(self):
 		denied = FakeResponse(status=401, body={"error": {"message": "invalid api key"}})
 		with patch.object(providers.requests, "post", return_value=denied) as post:

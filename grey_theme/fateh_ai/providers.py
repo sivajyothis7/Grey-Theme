@@ -40,6 +40,7 @@ ANTHROPIC_VERSION = "2023-06-01"
 MAX_RETRY_WAIT = 30  # seconds; a rate-limit wait longer than this moves on to the next model
 RETRY_STATUSES = {408, 409, 425, 429, 500, 502, 503, 504, 529}
 MODEL_GONE_CODES = ("model_not_found", "model_decommissioned", "not_found_error")
+RETRY_CODES = ("tool_use_failed",)
 MAX_RETRIES = 3
 _TRY_AGAIN_RE = re.compile(r"try again in\s+(?:(\d+)m)?\s*([\d.]+)\s*(ms|s)", re.I)
 
@@ -233,7 +234,9 @@ def _error_from_response(resp):
 	return ProviderError(
 		f"{status}: {message}",
 		status=status,
-		retryable=status in RETRY_STATUSES,
+		# Groq answers 400 tool_use_failed when the model wrote malformed tool-call JSON: the next
+		# sample is usually fine, so it is retried like a transient error
+		retryable=status in RETRY_STATUSES or code in RETRY_CODES,
 		model_gone=model_gone,
 		retry_after=_retry_after(resp, message) if status == 429 else None,
 	)
