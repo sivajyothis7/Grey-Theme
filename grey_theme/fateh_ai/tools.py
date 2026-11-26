@@ -488,6 +488,26 @@ def _fn_expr(fn, ref):
 	return f"{fn}(`{ref.fieldname}`)"
 
 
+def _empty_hint(doctype, filters):
+	"""When a company filter returns nothing, say whether other companies have matches."""
+	company_filters = [f for f in filters if f[0] == doctype and f[1] == "company"]
+	if not company_filters or not frappe.get_meta(doctype).has_field("company"):
+		return None
+	rest = [f for f in filters if f not in company_filters]
+	rows = frappe.get_list(
+		doctype,
+		fields=[f"`tab{doctype}`.`company` as company", f"count(distinct `tab{doctype}`.`name`) as n"],
+		filters=rest,
+		group_by=f"`tab{doctype}`.`company`",
+		order_by="n desc",
+		limit_page_length=5,
+	)
+	if not rows:
+		return None
+	found = ", ".join(f"{r.company} ({cint(r.n)})" for r in rows)
+	return f"0 rows for the company you filtered on, but matching records exist in: {found}. Check the company before saying there is nothing."
+
+
 def _limit(value, default=DEFAULT_ROWS, maximum=MAX_ROWS):
 	value = cint(value) or default
 	return max(1, min(maximum, value))
@@ -649,6 +669,7 @@ def search_records(doctype, filters=None, fields=None, order_by=None, limit=None
 		"doctype": doctype,
 		"rows": clean,
 		"returned": len(clean),
+		"hint": None if clean else _empty_hint(doctype, flt_),
 		"total_matching": total,
 		"_row_count": len(clean),
 		"_preview": _preview(clean, [r.alias for r in refs], total),
@@ -693,7 +714,10 @@ def get_record(doctype, name, fields=None):
 		if value in (None, "") or (value in (0, 0.0) and df.fieldname not in KEEP_ZERO_FIELDS and not wanted):
 			continue
 		out[df.fieldname] = _compact(value, 1000)
-	out["docstatus"] = doc.docstatus
+	if meta.is_submittable:
+		out["document_status"] = {0: "Draft", 1: "Submitted", 2: "Cancelled"}.get(doc.docstatus, doc.docstatus)
+	# masters (Customer, Item, Supplier...) have no draft/submitted state: no docstatus at all,
+	# otherwise the model reads docstatus 0 as "this customer is a draft"
 
 	if not wanted:
 		# Table fields carry no value of their own, so get_permitted_fields() never lists them:
@@ -742,11 +766,10 @@ def get_record(doctype, name, fields=None):
 )
 def count_records(doctype, filters=None):
 	doctype = resolve_doctype(doctype)
-	rows = frappe.get_list(
-		doctype, fields=[f"count(distinct `tab{doctype}`.`name`) as total"], filters=normalize_filters(doctype, filters)
-	)
+	flt_ = normalize_filters(doctype, filters)
+	rows = frappe.get_list(doctype, fields=[f"count(distinct `tab{doctype}`.`name`) as total"], filters=flt_)
 	total = cint(rows[0].total) if rows else 0
-	return {"doctype": doctype, "count": total, "_row_count": 1}
+	return {"doctype": doctype, "count": total, "hint": None if total else _empty_hint(doctype, flt_), "_row_count": 1}
 
 
 @tool(
@@ -895,6 +918,10 @@ def aggregate(doctype, metrics, group_by=None, period=None, filters=None, order_
 		note.append("base_* amounts are in company currency.")
 	if uses_child and "doc_count" in metric_aliases:
 		note.append("count = number of distinct parent documents.")
+	if not clean:
+		hint = _empty_hint(doctype, flt_)
+		if hint:
+			note.append(hint)
 	return {
 		"doctype": doctype,
 		"rows": clean,
@@ -1005,7 +1032,15 @@ def _extract_js_filters(script):
 	out = []
 	matches = list(_JS_FILTER_RE.finditer(script or ""))
 	for i, m in enumerate(matches):
-		window = script[max(0, m.start() - 200) : (matches[i + 1].start() if i + 1 < len(matches) else m.end() + 600)]
+		# the filter's own {...}: from the brace that opens it to the brace that opens the next one
+		begin = script.rfind("{", 0, m.start())
+		begin = m.start() if begin < 0 else begin
+		if i + 1 < len(matches):
+			nxt = script.rfind("{", m.end(), matches[i + 1].start())
+			stop = nxt if nxt > 0 else matches[i + 1].start()
+		else:
+			stop = m.end() + 600
+		window = script[begin:stop]
 
 		def grab(key):
 			hit = re.search(rf"{key}\s*:\s*(?:__\()?\s*[\"']([^\"']+)[\"']", window)
@@ -1207,36 +1242,56 @@ def party_outstanding(party_type, party=None, company=None, overdue_only=False, 
 		raise ToolError(_("party_type must be Customer or Supplier."))
 	doctype = resolve_doctype("Sales Invoice" if party_type == "Customer" else "Purchase Invoice")
 	party_field = "customer" if party_type == "Customer" else "supplier"
-	filters = [[doctype, "docstatus", "=", 1], [doctype, "outstanding_amount", "!=", 0]]
+	base = [[doctype, "docstatus", "=", 1], [doctype, "outstanding_amount", "!=", 0]]
 	if party:
-		filters.append([doctype, party_field, "=", cstr(party).strip()])
-	if company:
-		filters.append([doctype, "company", "=", cstr(company).strip()])
+		base.append([doctype, party_field, "=", cstr(party).strip()])
 	if overdue_only:
-		filters.append([doctype, "due_date", "<", nowdate()])
+		base.append([doctype, "due_date", "<", nowdate()])
+	company = cstr(company).strip() or None
 
 	currency_field = "party_account_currency" if frappe.get_meta(doctype).get_field("party_account_currency") else "currency"
-	rows = frappe.get_list(
-		doctype,
-		fields=[
-			f"`tab{doctype}`.`{party_field}` as party",
-			f"`tab{doctype}`.`{currency_field}` as currency",
-			f"sum(`tab{doctype}`.`outstanding_amount`) as outstanding",
-			f"count(distinct `tab{doctype}`.`name`) as invoices",
-			"min(`due_date`) as oldest_due_date",  # unqualified on purpose, see _fn_expr
-		],
-		filters=filters,
-		group_by=f"`tab{doctype}`.`{party_field}`, `tab{doctype}`.`{currency_field}`",
-		order_by="outstanding desc",
-		limit_page_length=_limit(limit),
-	)
+
+	def fetch(filters):
+		return frappe.get_list(
+			doctype,
+			fields=[
+				f"`tab{doctype}`.`{party_field}` as party",
+				f"`tab{doctype}`.`company` as company",
+				f"`tab{doctype}`.`{currency_field}` as currency",
+				f"sum(`tab{doctype}`.`outstanding_amount`) as outstanding",
+				f"count(distinct `tab{doctype}`.`name`) as invoices",
+				"min(`due_date`) as oldest_due_date",  # unqualified on purpose, see _fn_expr
+			],
+			filters=filters,
+			group_by=f"`tab{doctype}`.`{party_field}`, `tab{doctype}`.`company`, `tab{doctype}`.`{currency_field}`",
+			order_by="outstanding desc",
+			limit_page_length=_limit(limit),
+		)
+
+	note = None
+	rows = fetch(base + ([[doctype, "company", "=", company]] if company else []))
+	if not rows and company:
+		# a wrong company guess (e.g. "oman" in a customer's name) must not read as "nothing owed"
+		rows = fetch(base)
+		if rows:
+			others = sorted({r.company for r in rows})
+			note = (
+				f"Nothing outstanding in {company}, but there IS outstanding in: {', '.join(others)}. "
+				"These rows are shown below — tell the user which company they belong to."
+			)
 	clean = [{k: _compact(v) for k, v in r.items()} for r in rows]
 	today = getdate(nowdate())
 	for r in clean:
 		if r.get("oldest_due_date"):
 			r["days_overdue"] = max(0, (today - getdate(r["oldest_due_date"])).days)
-	columns = ["party", "currency", "outstanding", "invoices", "oldest_due_date", "days_overdue"]
-	return {"party_type": party_type, "rows": clean, "_row_count": len(clean), "_preview": _preview(clean, columns)}
+	columns = ["party", "company", "currency", "outstanding", "invoices", "oldest_due_date", "days_overdue"]
+	return {
+		"party_type": party_type,
+		"rows": clean,
+		"note": note,
+		"_row_count": len(clean),
+		"_preview": _preview(clean, columns),
+	}
 
 
 _SQL_FORBIDDEN = re.compile(

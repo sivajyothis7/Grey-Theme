@@ -271,6 +271,29 @@ class TestTools(FrappeTestCase):
 		self.assertEqual(res.reference, ("ToDo", todo.name))
 		self.assertEqual(json.loads(res.content)["record"]["description"].strip(), "fateh-ai-get-probe")
 
+	def test_masters_carry_no_docstatus(self):
+		todo = frappe.get_doc({"doctype": "ToDo", "description": "fateh-ai-docstatus-probe"}).insert()
+		record = json.loads(self.run_tool("get_record", {"doctype": "ToDo", "name": todo.name}).content)["record"]
+		self.assertNotIn("docstatus", record)
+		self.assertNotIn("document_status", record)
+
+	def test_wrong_company_does_not_read_as_nothing_owed(self):
+		if not frappe.db.exists("DocType", "Sales Invoice"):
+			self.skipTest("ERPNext not installed")
+		if not frappe.db.exists("Sales Invoice", {"docstatus": 1, "outstanding_amount": [">", 0]}):
+			self.skipTest("no outstanding invoices on this site")
+		res = self.run_tool("party_outstanding", {"party_type": "Customer", "company": "No Such Company Fateh", "limit": 3})
+		self.assertEqual(res.status, "Success", res.error)
+		data = json.loads(res.content)
+		self.assertTrue(data["rows"])
+		self.assertIn("No Such Company Fateh", data["note"])
+		self.assertIn("company", data["rows"][0])
+
+		res = self.run_tool("count_records", {"doctype": "Sales Invoice", "filters": {"company": "No Such Company Fateh"}})
+		data = json.loads(res.content)
+		self.assertEqual(data["count"], 0)
+		self.assertIn("matching records exist in", data["hint"])
+
 	def test_get_record_includes_child_rows(self):
 		contact = frappe.get_doc(
 			{
@@ -360,6 +383,10 @@ class TestTools(FrappeTestCase):
 		self.assertEqual([f["fieldname"] for f in filters], ["company", "from_date"])
 		self.assertEqual(filters[0]["required"], 1)
 		self.assertEqual(filters[0]["options"], "Company")
+		# each filter's label comes from its own object, not the previous one
+		self.assertEqual([f["label"] for f in filters], ["Company", "From Date"])
+		self.assertEqual(filters[1]["fieldtype"], "Date")
+		self.assertNotIn("required", filters[1])
 
 
 # ------------------------------------------------------------------------------ agent + api
