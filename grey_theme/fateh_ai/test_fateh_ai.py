@@ -412,6 +412,14 @@ def add_message(conversation, role, content="", blocks=None, run_id="r0"):
 
 
 class TestHistory(FrappeTestCase):
+	def test_message_text_is_stored_verbatim(self):
+		# answers are sanitised when rendered; frappe's save-time HTML escaping would turn
+		# [x](</app/...>) and "A & B" into &lt; / &amp; and break links and charts
+		conv = new_conversation()
+		text = "Gaven Joseph & Team: 65.625 OMR < 100 [Open](/app/query-report/Accounts%20Receivable?a=1&b=2)"
+		add_message(conv, "assistant", text, run_id="rv")
+		self.assertEqual(frappe.db.get_value("Fateh AI Message", {"conversation": conv}, "content"), text)
+
 	def test_dangling_tool_use_and_repeated_roles_are_repaired(self):
 		conv = new_conversation()
 		add_message(conv, "user", "first question", run_id="r1")

@@ -12,6 +12,7 @@ Security rules (see docs/fateh-ai-v2-design.md §3):
   structure and validated against DocType meta before they reach `get_list`.
 """
 
+import html
 import json
 import re
 import time
@@ -275,6 +276,8 @@ def _compact(value, limit=400):
 			value = cstr(value)
 	if "<" in value and ">" in value:
 		value = strip_html(value)
+	if "&" in value:
+		value = html.unescape(value)  # frappe stores "&" in names as &amp;
 	return value if len(value) <= limit else value[:limit] + "…"
 
 

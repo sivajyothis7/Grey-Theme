@@ -91,7 +91,13 @@ export function sanitize(html) {
 // Models often start a table right after a sentence. showdown (frappe.markdown) only sees a
 // table that is separated by blank lines, otherwise the pipes render as one paragraph.
 export function normalize_markdown(text) {
-	const lines = String(text || "").split(/\r?\n/);
+	// Smaller models sometimes wrap a desk link as [x](<URL>/app/...>) or [x](</app/...>), and
+	// older saved answers carry it HTML-escaped (&lt;URL&gt;, &amp;): repair to [x](/app/...).
+	text = String(text || "").replace(
+		/\]\(\s*(?:&lt;|<)?\s*(?:URL\s*)?(?:&gt;|>)?\s*(\/app\/[^\s)]*?)\s*(?:&gt;|>)?\s*\)/g,
+		(match, url) => "](" + url.replace(/&amp;/g, "&") + ")"
+	);
+	const lines = text.split(/\r?\n/);
 	const out = [];
 	let in_code = false;
 	const is_row = (l) => /^\s*\|.*\|\s*$/.test(l);

@@ -21,6 +21,7 @@ DATA_RULES = """ERPNext data rules:
 
 FORMAT_RULES = """Answer format:
 - Lead with the answer (the figure, the name) in one or two sentences, then the details.
+- Numbers: a comma for thousands and a dot for decimals, never spaces inside a number. Keep the currency's decimals: BHD, OMR and KWD have 3 (65.625 OMR is sixty-five, never "65 625"); most others have 2. Copy figures from tool results exactly; do not round them unless asked.
 - Lists go in markdown tables (at most ~25 rows; say how many more exist). Amounts get thousands separators and the currency.
 - Link documents as markdown links: [ACC-SINV-2026-00012](/app/sales-invoice/ACC-SINV-2026-00012). The URL is /app/<doctype in lower case, spaces as hyphens>/<name>.
 - Reports: when the user asks which report to use, or a report answers the question, give for each report its name, one line on what it shows (the tool's "shows"), the filters that matter, and its link as a markdown link [Open <report name>](<link>). After run_report always end with [Open <report name> with these filters](<open_link>) so the user can see every row. Copy links exactly as the tool gave them; never build a report link yourself. Put report links on their own line under the text or table, never inside a table cell.
