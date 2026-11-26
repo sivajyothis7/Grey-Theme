@@ -97,6 +97,12 @@ export function normalize_markdown(text) {
 		/\]\(\s*(?:&lt;|<)?\s*(?:URL\s*)?(?:&gt;|>)?\s*(\/app\/[^\s)]*?)\s*(?:&gt;|>)?\s*\)/g,
 		(match, url) => "](" + url.replace(/&amp;/g, "&") + ")"
 	);
+	// ...or put a made-up host in front of a desk path (https://your-erpnext-url/app/...):
+	// a desk link on this site's host or on a placeholder host becomes an in-desk link
+	text = text.replace(/\]\(\s*https?:\/\/([^\s/)]+)(\/app\/[^\s)]*)\)/g, (match, host, path) => {
+		const placeholder = /your|example|erpnext[^a-z]*url|site[^a-z]*url|localhost|domain/i.test(host);
+		return host === window.location.host || placeholder ? `](${path})` : match;
+	});
 	const lines = text.split(/\r?\n/);
 	const out = [];
 	let in_code = false;
