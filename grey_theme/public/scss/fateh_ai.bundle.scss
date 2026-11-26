@@ -67,17 +67,27 @@
 }
 
 .fai[data-mode="page"] {
-	height: calc(100vh - var(--navbar-height, 48px) - 48px);
-	min-height: 480px;
+	// navbar + 12px gap above + 12px below = exactly one screen, so the desk page itself never
+	// scrolls (a scrolled page hides the chat header under the sticky navbar)
+	height: calc(100vh - var(--navbar-height, 48px) - 24px);
+	height: calc(100dvh - var(--navbar-height, 48px) - 24px);
+	min-height: 340px;
 	border: 1px solid var(--fai-border);
 	border-radius: var(--fai-radius);
 	box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.06));
-	margin-block: 12px;
+	margin-block: 12px 0;
 }
 
 .fai-page {
 	.page-head {
 		display: none;
+	}
+	.page-body,
+	.page-wrapper,
+	.page-content {
+		min-height: 0;
+		padding-bottom: 0;
+		margin-bottom: 0;
 	}
 	.layout-main-section-wrapper,
 	.layout-main-section {
@@ -410,6 +420,9 @@
 
 .fai-bubble {
 	max-width: 82%;
+	unicode-bidi: plaintext;
+	text-align: start;
+	line-height: 1.5;
 	padding: 9px 14px;
 	border-radius: 16px 16px 4px 16px;
 	background: var(--fai-tint-strong);
@@ -434,7 +447,21 @@
 }
 
 .fai-md {
-	word-break: break-word;
+	word-break: normal;
+	overflow-wrap: anywhere;
+	line-height: 1.6;
+
+	// each paragraph aligns to its own script, so Arabic lines sit right even in an English UI
+	p,
+	li,
+	h1,
+	h2,
+	h3,
+	h4,
+	blockquote {
+		unicode-bidi: plaintext;
+		text-align: start;
+	}
 
 	> :first-child {
 		margin-top: 0;
@@ -447,22 +474,46 @@
 	ol,
 	blockquote,
 	pre {
-		margin: 0 0 0.65em;
+		margin: 0 0 0.7em;
 	}
 	ul,
 	ol {
-		padding-inline-start: 1.4em;
+		padding-inline-start: 1.35em;
+	}
+	li {
+		padding-inline-start: 0.15em;
 	}
 	li + li {
-		margin-top: 0.2em;
+		margin-top: 0.25em;
+	}
+	li > p {
+		margin: 0;
+	}
+	li::marker {
+		color: var(--fai-muted);
 	}
 	h1,
 	h2,
 	h3,
 	h4 {
-		margin: 0.9em 0 0.4em;
-		font-size: 1.02em;
+		margin: 1em 0 0.45em;
+		line-height: 1.35;
 		font-weight: 600;
+		color: var(--heading-color, var(--text-color));
+	}
+	h1 {
+		font-size: 1.2em;
+	}
+	h2 {
+		font-size: 1.12em;
+	}
+	h3,
+	h4 {
+		font-size: 1.04em;
+	}
+	strong {
+		font-weight: 600;
+		color: var(--heading-color, var(--text-color));
 	}
 	a {
 		color: var(--fai-accent);
@@ -555,8 +606,15 @@ pre:hover > .fai-copy-code {
 		white-space: normal;
 		word-break: normal;
 		overflow-wrap: normal;
-		min-width: 6em;
 		max-width: 340px;
+	}
+	td,
+	th {
+		unicode-bidi: plaintext;
+	}
+	// a short "#"/rank column stays narrow; text columns get room to breathe
+	td:not(.fai-num) {
+		min-width: 7ch;
 	}
 	th {
 		position: sticky;
@@ -1301,7 +1359,7 @@ body.fai-resizing {
 		max-width: 92%;
 	}
 	.fai[data-mode="page"] {
-		margin-block: 6px;
-		height: calc(100vh - var(--navbar-height, 48px) - 24px);
+		margin-block: 6px 0;
+		height: calc(100dvh - var(--navbar-height, 48px) - 12px);
 	}
 }

@@ -443,7 +443,7 @@ def _order_by(doctype, order_by, aliases=None):
 		if direction not in ("asc", "desc"):
 			raise ToolError(_("order_by direction must be asc or desc."))
 		if aliases and field in aliases:
-			parts.append(f"{aliases[field]} {direction}")
+			parts.extend(f"{col.strip()} {direction}" for col in aliases[field].split(","))
 		else:
 			parts.append(f"{resolve_field(doctype, field).expr} {direction}")
 	return ", ".join(parts) or None
@@ -719,7 +719,7 @@ def count_records(doctype, filters=None):
 		"doctype": {"type": "string"},
 		"metrics": {
 			"type": "array",
-			"description": "List of {function: sum|count|avg|min|max, field: fieldname}. count with no field counts documents (alias doc_count).",
+			"description": "List of {function: sum|count|avg|min|max, field: fieldname, alias?: name}. count with no field counts documents (alias doc_count).",
 			"items": {"type": "object"},
 		},
 		"group_by": {"type": "array", "items": {"type": "string"}, "description": "Up to 2 fields."},
@@ -728,7 +728,7 @@ def count_records(doctype, filters=None):
 			"description": "{field: a Date field, by: day|week|month|quarter|year} to bucket by time.",
 		},
 		"filters": {"description": "Same format as search_records."},
-		"order_by": {"type": "string", "description": "A metric alias such as 'sum_base_grand_total desc', or a group field."},
+		"order_by": {"type": "string", "description": "A metric alias such as 'sum_base_grand_total desc', a group field, or 'period asc'."},
 		"limit": {"type": "integer", "description": "Default 20, max 200."},
 	},
 	required=("doctype", "metrics"),
@@ -804,6 +804,11 @@ def aggregate(doctype, metrics, group_by=None, period=None, filters=None, order_
 				min_max_refs.append(ref)
 			alias = f"{fn}_{ref.alias}"
 			select.append(f"{_fn_expr(fn, ref)} as `{alias}`")
+		# the model may name its metric ({"alias": "sales"}) and then order by that name
+		custom = cstr(m.get("alias") or m.get("as")).strip()
+		if custom and FIELDNAME_RE.match(custom) and custom not in aliases:
+			select[-1] = select[-1].rsplit(" as ", 1)[0] + f" as `{custom}`"
+			alias = custom
 		metric_aliases.append(alias)
 		columns.append(alias)
 		aliases[alias] = alias
@@ -822,6 +827,12 @@ def aggregate(doctype, metrics, group_by=None, period=None, filters=None, order_
 				% {"f": ref.fieldname, "t": ", ".join(owners)}
 			)
 
+	period_cols = [a for a in columns if a.startswith("period_")]
+	if period_cols:
+		# "period" / "month" etc. in order_by mean the period columns
+		aliases["period"] = ", ".join(period_cols)
+		for col in period_cols:
+			aliases.setdefault(col.removeprefix("period_"), col)
 	limit = _limit(limit)
 	if order_by:
 		order = _order_by(doctype, order_by, aliases)

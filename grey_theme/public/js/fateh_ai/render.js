@@ -85,7 +85,25 @@ export function sanitize(html) {
 	return out;
 }
 
+// Models often start a table right after a sentence. showdown (frappe.markdown) only sees a
+// table that is separated by blank lines, otherwise the pipes render as one paragraph.
+export function normalize_markdown(text) {
+	const lines = String(text || "").split(/\r?\n/);
+	const out = [];
+	let in_code = false;
+	const is_row = (l) => /^\s*\|.*\|\s*$/.test(l);
+	lines.forEach((line) => {
+		if (/^\s*```/.test(line)) in_code = !in_code;
+		const prev = out.length ? out[out.length - 1] : "";
+		if (!in_code && is_row(line) && prev.trim() && !is_row(prev)) out.push("");
+		if (!in_code && !is_row(line) && line.trim() && is_row(prev)) out.push("");
+		out.push(line);
+	});
+	return out.join("\n");
+}
+
 function md_to_html(text) {
+	text = normalize_markdown(text);
 	if (frappe.markdown) return frappe.markdown(text);
 	return `<p>${frappe.utils.escape_html(text).replace(/\n/g, "<br>")}</p>`;
 }

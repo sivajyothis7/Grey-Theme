@@ -533,7 +533,7 @@ export class ChatApp {
 		this.load_conversations();
 		this.show_empty();
 		this.refresh_context();
-		setTimeout(() => this.$.input.focus(), 50);
+		setTimeout(() => this.$.input.focus({ preventScroll: true }), 50);
 	}
 
 	lock_composer() {
@@ -796,7 +796,7 @@ export class ChatApp {
 		this.update_header();
 		this.render_conversations();
 		this.show_empty();
-		this.$.input.focus();
+		this.$.input.focus({ preventScroll: true });
 		if (this.mode === "page" && window.innerWidth < 900) this.root.classList.add("fai-side-collapsed");
 	}
 
@@ -877,7 +877,7 @@ export class ChatApp {
 	set_input(text) {
 		this.$.input.value = text;
 		this.autosize();
-		this.$.input.focus();
+		this.$.input.focus({ preventScroll: true });
 	}
 
 	autosize() {
@@ -996,7 +996,7 @@ export class ChatApp {
 		this.set_busy(false);
 		this.autoscroll();
 		this.load_conversations();
-		this.$.input.focus();
+		this.$.input.focus({ preventScroll: true });
 	}
 
 	add_retry(turn) {

@@ -213,7 +213,7 @@ class Launcher {
 		document.body.classList.add("fai-drawer-open");
 		this.app.refresh_context(true);
 		this.sync_button();
-		setTimeout(() => this.app.$.input.focus(), 120);
+		setTimeout(() => this.app.$.input.focus({ preventScroll: true }), 120);
 	}
 
 	close() {
