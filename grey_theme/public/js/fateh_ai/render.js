@@ -102,8 +102,34 @@ export function normalize_markdown(text) {
 	return out.join("\n");
 }
 
+// Our own showdown converter: frappe.md2html is built with tables OFF on many v15 builds
+// (15.112 included), which leaves model tables as raw pipes. The output still goes through
+// sanitize() — showdown itself does not sanitise.
+let converter = null;
+
+function get_converter() {
+	if (converter !== null) return converter;
+	if (!frappe.md2html && frappe.markdown) frappe.markdown(""); // frappe creates it lazily
+	const Ctor =
+		(window.showdown && window.showdown.Converter) || (frappe.md2html && frappe.md2html.constructor);
+	converter = Ctor
+		? new Ctor({
+				tables: true,
+				ghCodeBlocks: true,
+				strikethrough: true,
+				literalMidWordUnderscores: true, // base_net_total must not turn italic
+				disableForced4SpacesIndentedSublists: true,
+				simplifiedAutoLink: false,
+				emoji: false,
+		  })
+		: false;
+	return converter;
+}
+
 function md_to_html(text) {
 	text = normalize_markdown(text);
+	const md = get_converter();
+	if (md) return md.makeHtml(text);
 	if (frappe.markdown) return frappe.markdown(text);
 	return `<p>${frappe.utils.escape_html(text).replace(/\n/g, "<br>")}</p>`;
 }
