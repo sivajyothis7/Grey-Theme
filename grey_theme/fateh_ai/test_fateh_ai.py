@@ -389,6 +389,26 @@ class TestAgentRun(FrappeTestCase):
 		self.assertEqual((conv_doc.total_input_tokens, conv_doc.total_output_tokens), (250, 22))
 		self.assertFalse(frappe.cache.get_value(agent.run_key(conv)))
 
+	def test_stop_flag_is_seen_inside_the_job(self):
+		conv = new_conversation()
+		add_message(conv, "user", "count my todos", run_id="run3")
+		# an earlier read in the same process memoises None in frappe.local.cache ...
+		frappe.cache.get_value(agent.stop_key("run3"))
+		# ... and the web request then sets the flag in Redis
+		frappe.cache.set_value(agent.stop_key("run3"), 1, expires_in_sec=60)
+
+		def scripted(settings, **kwargs):
+			yield {"type": "model", "model": "model-a"}
+			yield {"type": "tool_use", "id": "t1", "name": "count_records", "input": {"doctype": "ToDo"}}
+
+		events = []
+		with patch.object(config, "get_settings", return_value=make_settings()), patch.object(
+			agent.providers, "stream_chat", side_effect=scripted
+		), patch.object(frappe, "publish_realtime", side_effect=capture(events)), patch.object(frappe.db, "rollback"):
+			agent.run(conv, "run3")
+		self.assertEqual(events[-1]["type"], "stopped")
+		self.assertFalse(frappe.get_all("Fateh AI Audit Log", filters={"conversation": conv}))
+
 	def test_provider_error_is_saved_and_emitted(self):
 		conv = new_conversation()
 		add_message(conv, "user", "hello", run_id="run2")

@@ -66,7 +66,7 @@ def _messages_today(user):
 
 
 def _is_running(conversation):
-	run_id = frappe.cache.get_value(agent.run_key(conversation))
+	run_id = agent.cache_get(agent.run_key(conversation))
 	return cstr(run_id) or None
 
 
@@ -170,7 +170,7 @@ def send_message(message: str, conversation: str | None = None, context: str | d
 @frappe.whitelist(methods=["POST"])
 def stop(run_id: str):
 	run_id = cstr(run_id).strip()
-	owner = frappe.cache.get_value(agent.owner_key(run_id))
+	owner = agent.cache_get(agent.owner_key(run_id))
 	if not owner:
 		return {"stopped": 0}
 	if owner != frappe.session.user:

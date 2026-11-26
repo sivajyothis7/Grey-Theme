@@ -30,6 +30,17 @@ FLUSH_SECONDS = 0.08
 RUN_TTL = 15 * 60
 
 
+def cache_get(key):
+	"""Read a short-lived flag straight from Redis.
+
+	RedisWrapper.get_value memoises every value it reads (None included) in frappe.local.cache
+	for the life of the process. A background job is one long process, so after its first read
+	a Stop flag set later by the web request would never be seen. Drop the local entry first.
+	"""
+	frappe.local.cache.pop(frappe.cache.make_key(key), None)
+	return frappe.cache.get_value(key, expires=True)
+
+
 def run_key(conversation):
 	return f"fateh_ai:running:{conversation}"
 
@@ -79,7 +90,7 @@ class Run:
 		if now - self._last_stop_check < 0.4:
 			return False
 		self._last_stop_check = now
-		self._stopped = bool(frappe.cache.get_value(stop_key(self.run_id)))
+		self._stopped = bool(cache_get(stop_key(self.run_id)))
 		return self._stopped
 
 	# ---------------------------------------------------------------- storage
