@@ -449,6 +449,20 @@ def _order_by(doctype, order_by, aliases=None):
 	return ", ".join(parts) or None
 
 
+def _fn_expr(fn, ref):
+	"""SQL for fn(field) that frappe's get_list accepts.
+
+	DatabaseQuery.extract_tables() reads a table name out of every field that contains "tab" and
+	"." unless the field also contains count( / sum( / avg( / extract( ... (frappe/model/db_query.py),
+	so min(`tabX`.`col`) or year(`tabX`.`col`) is misread as a table called "min(`tabX" and fails
+	with "DocType ... not found". sum/count/avg keep the qualified column; min/max use the bare
+	column (aggregate() refuses the case where that would be ambiguous); periods use extract().
+	"""
+	if fn in ("sum", "avg", "count"):
+		return f"{fn}({ref.expr})"
+	return f"{fn}(`{ref.fieldname}`)"
+
+
 def _limit(value, default=DEFAULT_ROWS, maximum=MAX_ROWS):
 	value = cint(value) or default
 	return max(1, min(maximum, value))
@@ -705,7 +719,7 @@ def count_records(doctype, filters=None):
 		"doctype": {"type": "string"},
 		"metrics": {
 			"type": "array",
-			"description": "List of {function: sum|count|avg|min|max, field: fieldname}. count needs no field.",
+			"description": "List of {function: sum|count|avg|min|max, field: fieldname}. count with no field counts documents (alias doc_count).",
 			"items": {"type": "object"},
 		},
 		"group_by": {"type": "array", "items": {"type": "string"}, "description": "Up to 2 fields."},
@@ -727,10 +741,15 @@ def aggregate(doctype, metrics, group_by=None, period=None, filters=None, order_
 
 	select, columns, group_exprs, aliases = [], [], [], {}
 	uses_child = False
+	plain_children = set()  # child tables named outside any function: frappe joins these itself
+	fn_children = set()  # child tables only referenced inside a function
+	min_max_refs = []
 
 	for spec in (group_by or [])[:2]:
 		ref = resolve_field(doctype, spec)
 		uses_child = uses_child or ref.is_child
+		if ref.is_child:
+			plain_children.add(ref.doctype)
 		select.append(f"{ref.expr} as `{ref.alias}`")
 		group_exprs.append(ref.expr)
 		columns.append(ref.alias)
@@ -747,10 +766,19 @@ def aggregate(doctype, metrics, group_by=None, period=None, filters=None, order_
 		if by not in PERIODS:
 			raise ToolError(_("period.by must be one of %(p)s") % {"p": ", ".join(PERIODS)})
 		uses_child = uses_child or ref.is_child
-		parts = {"day": ["date"], "week": ["year", "week"], "month": ["year", "month"], "quarter": ["year", "quarter"], "year": ["year"]}[by]
-		for fn in parts:
-			alias = f"period_{fn}"
-			select.append(f"{fn}({ref.expr}) as `{alias}`")
+		if ref.is_child:
+			fn_children.add(ref.doctype)
+		units = {
+			"day": ["year", "month", "day"],
+			"week": ["year", "week"],
+			"month": ["year", "month"],
+			"quarter": ["year", "quarter"],
+			"year": ["year"],
+		}[by]
+		for unit in units:
+			alias = f"period_{unit}"
+			# extract() (not year()/month()): see _fn_expr
+			select.append(f"extract({unit} from {ref.expr}) as `{alias}`")
 			group_exprs.append(alias)
 			columns.append(alias)
 			aliases[alias] = alias
@@ -763,18 +791,36 @@ def aggregate(doctype, metrics, group_by=None, period=None, filters=None, order_
 		if fn not in ("sum", "count", "avg", "min", "max"):
 			raise ToolError(_("Metric function must be sum, count, avg, min or max."))
 		if fn == "count" and not m.get("field"):
-			alias = "count"
+			alias = "doc_count"
 			select.append(f"count(distinct `tab{doctype}`.`name`) as `{alias}`")
 		else:
 			ref = resolve_field(doctype, m.get("field"))
 			uses_child = uses_child or ref.is_child
+			if ref.is_child:
+				fn_children.add(ref.doctype)
 			if fn in ("sum", "avg") and ref.fieldtype not in NUMERIC_TYPES:
 				raise ToolError(_("%(f)s is %(t)s, not numeric; %(fn)s needs a number field.") % {"f": ref.fieldname, "t": ref.fieldtype, "fn": fn})
+			if fn in ("min", "max"):
+				min_max_refs.append(ref)
 			alias = f"{fn}_{ref.alias}"
-			select.append(f"{fn}({ref.expr}) as `{alias}`")
+			select.append(f"{_fn_expr(fn, ref)} as `{alias}`")
 		metric_aliases.append(alias)
 		columns.append(alias)
 		aliases[alias] = alias
+
+	flt_ = normalize_filters(doctype, filters)
+	filtered_children = {f[0] for f in flt_ if f[0] != doctype}
+	for child in fn_children - plain_children - filtered_children:
+		# frappe does not see a table inside a function; a no-op filter makes it join the table
+		flt_.append([child, "name", "is", "set"])
+	joined = {doctype} | plain_children | fn_children | filtered_children
+	for ref in min_max_refs:
+		owners = [dt for dt in joined if frappe.get_meta(dt).has_field(ref.fieldname) or ref.fieldname in STANDARD_FIELDS]
+		if len(owners) > 1:
+			raise ToolError(
+				_("%(f)s exists in several of the tables involved (%(t)s); min/max on it cannot be combined with those child fields.")
+				% {"f": ref.fieldname, "t": ", ".join(owners)}
+			)
 
 	limit = _limit(limit)
 	if order_by:
@@ -786,7 +832,7 @@ def aggregate(doctype, metrics, group_by=None, period=None, filters=None, order_
 	else:
 		order = None
 
-	kwargs = dict(fields=select, filters=normalize_filters(doctype, filters), limit_page_length=limit)
+	kwargs = dict(fields=select, filters=flt_, limit_page_length=limit)
 	if group_exprs:
 		kwargs["group_by"] = ", ".join(group_exprs)
 	if order:
@@ -797,7 +843,7 @@ def aggregate(doctype, metrics, group_by=None, period=None, filters=None, order_
 	note = []
 	if any("base_" in a for a in metric_aliases):
 		note.append("base_* amounts are in company currency.")
-	if uses_child and "count" in metric_aliases:
+	if uses_child and "doc_count" in metric_aliases:
 		note.append("count = number of distinct parent documents.")
 	return {
 		"doctype": doctype,
@@ -1100,7 +1146,7 @@ def party_outstanding(party_type, party=None, company=None, overdue_only=False, 
 			f"`tab{doctype}`.`{currency_field}` as currency",
 			f"sum(`tab{doctype}`.`outstanding_amount`) as outstanding",
 			f"count(distinct `tab{doctype}`.`name`) as invoices",
-			f"min(`tab{doctype}`.`due_date`) as oldest_due_date",
+			"min(`due_date`) as oldest_due_date",  # unqualified on purpose, see _fn_expr
 		],
 		filters=filters,
 		group_by=f"`tab{doctype}`.`{party_field}`, `tab{doctype}`.`{currency_field}`",

@@ -32,14 +32,25 @@ FORMAT_RULES = """Answer format:
 
 def _company_info(user):
 	company = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
+	if company and not (frappe.db.exists("Company", company) and frappe.has_permission("Company", "read", doc=company)):
+		company = None
 	try:
-		companies = frappe.get_list("Company", pluck="name", limit_page_length=10)
+		companies = frappe.get_list("Company", pluck="name", order_by="name asc", limit_page_length=16)
 	except Exception:
 		companies = []
-	if company and companies and company not in companies:
+	if not company and len(companies) == 1:
 		company = companies[0]
 	currency = frappe.get_cached_value("Company", company, "default_currency") if company else None
 	return company, currency, companies
+
+
+def _companies_line(company, currency, companies):
+	line = f"Default company: {company}" + (f" (currency {currency})" if currency else "") + "." if company else "No default company is set."
+	if len(companies) > 15:
+		line += " The user can see many companies: use the default company unless the user names another, and never guess a company name — look it up with search_link."
+	elif len(companies) > 1:
+		line += f" Companies the user can see: {', '.join(companies)}. Use the default unless the user names another."
+	return line
 
 
 def _fiscal_year(company):
@@ -120,15 +131,14 @@ def describe_context(context):
 def build_system_prompt(settings, context=None, user=None):
 	user = user or frappe.session.user
 	full_name = frappe.utils.get_fullname(user)
-	roles = [r for r in frappe.get_roles(user) if r not in ("All", "Guest", "Desk User")]
+	roles = [r for r in frappe.get_roles(user) if r not in ("All", "Guest", "Desk User") and not r.startswith("_Test")]
 	company, currency, companies = _company_info(user)
 
 	parts = [
 		f"You are {settings.assistant_name}, a read-only business assistant inside ERPNext (Frappe). "
 		f"You answer {full_name}'s questions about their company's data by calling tools.",
-		f"User: {full_name} ({user}). Roles: {', '.join(roles[:30]) or 'none'}.",
-		f"Default company: {company or 'not set'}" + (f" (currency {currency})" if currency else "") + "."
-		+ (f" Companies the user can see: {', '.join(companies)}." if len(companies) > 1 else ""),
+		f"User: {full_name} ({user}). Roles: {', '.join(roles[:12]) or 'none'}" + (" and more." if len(roles) > 12 else "."),
+		_companies_line(company, currency, companies),
 		_date_anchor(company),
 		"""How to work:
 - Get facts with tools; never invent numbers, names or document IDs. If a tool returns nothing, say so.

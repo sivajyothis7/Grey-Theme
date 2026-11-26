@@ -226,6 +226,37 @@ class TestTools(FrappeTestCase):
 		res = self.run_tool("aggregate", {"doctype": "ToDo", "metrics": [{"function": "sum", "field": "description"}]})
 		self.assertEqual(res.status, "Error")  # sum of a text field is refused
 
+		# min/max and periods must survive frappe's DatabaseQuery.extract_tables()
+		res = self.run_tool(
+			"aggregate",
+			{
+				"doctype": "ToDo",
+				"metrics": [{"function": "count"}, {"function": "max", "field": "modified"}],
+				"period": {"field": "creation", "by": "month"},
+			},
+		)
+		self.assertEqual(res.status, "Success", res.error)
+		row = json.loads(res.content)["rows"][0]
+		self.assertIn("period_year", row)
+		self.assertIn("max_modified", row)
+
+	def test_party_outstanding_runs(self):
+		if not frappe.db.exists("DocType", "Sales Invoice"):
+			self.skipTest("ERPNext not installed")
+		res = self.run_tool("party_outstanding", {"party_type": "Customer", "overdue_only": True, "limit": 3})
+		self.assertEqual(res.status, "Success", res.error)
+		res = self.run_tool(
+			"aggregate",
+			{
+				"doctype": "Sales Invoice",
+				"metrics": [{"function": "sum", "field": "Sales Invoice Item.base_net_amount"}],
+				"filters": {"docstatus": 1},
+				"period": {"field": "posting_date", "by": "quarter"},
+				"limit": 4,
+			},
+		)
+		self.assertEqual(res.status, "Success", res.error)
+
 	def test_get_record_reads_permitted_document(self):
 		todo = frappe.get_doc({"doctype": "ToDo", "description": "fateh-ai-get-probe"}).insert()
 		res = self.run_tool("get_record", {"doctype": "ToDo", "name": todo.name})

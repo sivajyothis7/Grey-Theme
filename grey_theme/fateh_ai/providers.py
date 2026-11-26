@@ -28,6 +28,7 @@ Resilience (lessons from Groq retiring model ids without notice):
 """
 
 import json
+import re
 import time
 
 import frappe
@@ -36,17 +37,36 @@ from frappe import _
 from frappe.utils import cint, cstr
 
 ANTHROPIC_VERSION = "2023-06-01"
+MAX_RETRY_WAIT = 30  # seconds; a rate-limit wait longer than this moves on to the next model
 RETRY_STATUSES = {408, 409, 425, 429, 500, 502, 503, 504, 529}
 MODEL_GONE_CODES = ("model_not_found", "model_decommissioned", "not_found_error")
-MAX_RETRIES = 2
+MAX_RETRIES = 3
+_TRY_AGAIN_RE = re.compile(r"try again in\s+(?:(\d+)m)?\s*([\d.]+)\s*(ms|s)", re.I)
+
+
+def _retry_after(resp, message):
+	"""Seconds the provider asked us to wait (Retry-After header or Groq's 'try again in 5.9s')."""
+	header = resp.headers.get("retry-after") if getattr(resp, "headers", None) else None
+	try:
+		if header:
+			return float(header)
+	except ValueError:
+		pass
+	hit = _TRY_AGAIN_RE.search(message or "")
+	if hit:
+		minutes, value, unit = hit.groups()
+		seconds = float(value) / (1000 if unit.lower() == "ms" else 1)
+		return seconds + 60 * int(minutes or 0)
+	return None
 
 
 class ProviderError(Exception):
-	def __init__(self, message, status=None, retryable=False, model_gone=False):
+	def __init__(self, message, status=None, retryable=False, model_gone=False, retry_after=None):
 		super().__init__(message)
 		self.status = status
 		self.retryable = retryable
 		self.model_gone = model_gone
+		self.retry_after = retry_after
 
 
 class StopRequested(Exception):
@@ -77,12 +97,18 @@ def stream_chat(settings, *, messages, system, tools=None, tool_choice="auto", s
 				return
 			except ProviderError as e:
 				last_error = e
-				if e.model_gone and not yielded:
+				if yielded:
+					raise
+				if e.model_gone:
 					break  # try the next model in the chain
-				if e.retryable and not yielded and attempt < MAX_RETRIES:
-					attempt += 1
-					time.sleep(min(2**attempt, 8))
-					continue
+				if e.retryable and attempt < MAX_RETRIES:
+					wait = e.retry_after if e.retry_after is not None else min(2**attempt, 8)
+					if wait <= MAX_RETRY_WAIT:
+						attempt += 1
+						time.sleep(max(0.5, wait) + 0.5)
+						continue
+				if e.status == 429 and model != settings.models[-1]:
+					break  # rate-limited on this model: the next one has its own quota
 				raise
 			except requests.RequestException as e:
 				last_error = ProviderError(_("Could not reach the model provider: %(err)s") % {"err": cstr(e)})
@@ -197,6 +223,7 @@ def _error_from_response(resp):
 		status=status,
 		retryable=status in RETRY_STATUSES,
 		model_gone=model_gone,
+		retry_after=_retry_after(resp, message) if status == 429 else None,
 	)
 
 
