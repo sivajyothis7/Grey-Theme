@@ -264,6 +264,19 @@ class TestTools(FrappeTestCase):
 		self.assertEqual(res.reference, ("ToDo", todo.name))
 		self.assertEqual(json.loads(res.content)["record"]["description"].strip(), "fateh-ai-get-probe")
 
+	def test_get_record_includes_child_rows(self):
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Fateh Child Probe",
+				"email_ids": [{"email_id": "fateh.child.probe@example.com", "is_primary": 1}],
+			}
+		).insert()
+		res = self.run_tool("get_record", {"doctype": "Contact", "name": contact.name})
+		self.assertEqual(res.status, "Success", res.error)
+		record = json.loads(res.content)["record"]
+		self.assertEqual(record["email_ids"][0]["email_id"], "fateh.child.probe@example.com")
+
 	def test_rows_follow_the_users_permissions(self):
 		todo = frappe.get_doc(
 			{"doctype": "ToDo", "description": "fateh-ai-admin-only", "allocated_to": "Administrator"}

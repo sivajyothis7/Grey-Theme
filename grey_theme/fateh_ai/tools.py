@@ -92,6 +92,29 @@ OPERATORS = {
 	"is",
 }
 PERIODS = ("day", "week", "month", "quarter", "year")
+CHILD_ROW_LIMIT = 40
+KEEP_ZERO_FIELDS = {
+	"outstanding_amount",
+	"grand_total",
+	"base_grand_total",
+	"rounded_total",
+	"paid_amount",
+	"total_qty",
+	"per_billed",
+	"per_delivered",
+	"per_received",
+}
+# child-row fields worth showing even when the DocType does not put them in the grid
+KEY_CHILD_FIELDS = {
+	"item_code", "item_name", "description", "qty", "uom", "stock_uom", "rate", "amount",
+	"net_amount", "base_net_amount", "discount_percentage", "warehouse", "batch_no",
+	"serial_no", "delivered_qty", "received_qty", "billed_amt", "against_sales_order",
+	"sales_order", "delivery_note", "purchase_order", "purchase_receipt", "account_head",
+	"charge_type", "tax_amount", "total", "payment_term", "due_date", "payment_amount",
+	"outstanding", "sales_person", "allocated_percentage", "account", "debit", "credit",
+	"party_type", "party", "reference_type", "reference_name", "allocated_amount",
+	"cost_center", "project",
+}
 FIELDNAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
 
 
@@ -663,33 +686,47 @@ def get_record(doctype, name, fields=None):
 		if wanted and df.fieldname not in wanted:
 			continue
 		value = doc.get(df.fieldname)
-		if value in (None, "", 0) and df.fieldtype not in NUMERIC_TYPES:
+		# zeros and unticked checks are noise for the model (a Sales Invoice carries ~100 of
+		# them); keep the zero only where it is the answer, e.g. outstanding_amount = 0
+		if value in (None, "") or (value in (0, 0.0) and df.fieldname not in KEEP_ZERO_FIELDS and not wanted):
 			continue
 		out[df.fieldname] = _compact(value, 1000)
 	out["docstatus"] = doc.docstatus
 
 	if not wanted:
+		# Table fields carry no value of their own, so get_permitted_fields() never lists them:
+		# check the table's permlevel against the user's access instead.
+		access = set(doc.get_permlevel_access("read")) if frappe.session.user != "Administrator" else None
 		for tf in meta.get_table_fields():
-			if tf.options in BLOCKED_DOCTYPES or tf.fieldname not in permitted:
+			if tf.options in BLOCKED_DOCTYPES or (access is not None and (tf.permlevel or 0) not in access):
 				continue
 			child_permitted = _permitted_fieldnames(tf.options, parenttype=doctype)
 			child_meta = frappe.get_meta(tf.options)
+			keep = [
+				df
+				for df in child_meta.fields
+				if df.fieldtype not in LAYOUT_TYPES
+				and df.fieldname in child_permitted
+				and (df.in_list_view or df.reqd or df.fieldname in KEY_CHILD_FIELDS)
+			]
+			all_rows = doc.get(tf.fieldname) or []
 			rows = []
-			for child in (doc.get(tf.fieldname) or [])[:40]:
+			for child in all_rows[:CHILD_ROW_LIMIT]:
 				row = {}
-				for df in child_meta.fields:
-					if df.fieldtype in LAYOUT_TYPES or df.fieldname not in child_permitted:
-						continue
+				for df in keep:
 					value = child.get(df.fieldname)
-					if value in (None, ""):
+					if value in (None, "") or (value in (0, 0.0) and df.fieldtype not in NUMERIC_TYPES):
 						continue
-					row[df.fieldname] = _compact(value, 300)
-				rows.append(row)
+					row[df.fieldname] = _compact(value, 200)
+				if row:
+					rows.append(row)
 			if rows:
 				out[tf.fieldname] = rows
-				total_rows = len(doc.get(tf.fieldname) or [])
-				if total_rows > 40:
-					out[f"{tf.fieldname}__note"] = _("showing 40 of %(n)s rows") % {"n": total_rows}
+				if len(all_rows) > CHILD_ROW_LIMIT:
+					out[f"{tf.fieldname}__note"] = _("showing %(shown)s of %(n)s rows") % {
+						"shown": CHILD_ROW_LIMIT,
+						"n": len(all_rows),
+					}
 
 	return {"record": out, "_row_count": 1, "_reference": (doctype, doc.name)}
 
