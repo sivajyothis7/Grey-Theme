@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"m7XqKhIks2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">FATEH AI</span>\",\"col\":12}},{\"id\":\"0381RRFDGp\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"AI Settings\",\"col\":3}},{\"id\":\"MCgbi9TNON\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Fateh AI Assistant\",\"col\":3}},{\"id\":\"Gt7xQ2mLpV\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Grey Theme UI Settings\",\"col\":3}}]",
+ "content": "[{\"id\":\"m7XqKhIks2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">FATEH AI</span>\",\"col\":12}},{\"id\":\"0381RRFDGp\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"AI Settings\",\"col\":3}},{\"id\":\"MCgbi9TNON\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Fateh AI Assistant\",\"col\":3}},{\"id\":\"Gt7xQ2mLpV\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Grey Theme UI Settings\",\"col\":3}},{\"id\":\"FaiAudit01\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"AI Audit Log\",\"col\":3}},{\"id\":\"FaiChats01\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"AI Conversations\",\"col\":3}}]",
  "creation": "2025-10-31 12:04:54.958421",
  "custom_blocks": [],
  "docstatus": 0,
@@ -13,7 +13,7 @@
  "is_hidden": 0,
  "label": "FATEH AI",
  "links": [],
- "modified": "2026-09-29 09:14:22.610338",
+ "modified": "2026-11-26 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Grey Theme",
  "name": "FATEH AI",
@@ -44,6 +44,20 @@
    "doc_view": "",
    "label": "Grey Theme UI Settings",
    "link_to": "Grey Theme UI Settings",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "AI Audit Log",
+   "link_to": "Fateh AI Audit Log",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "AI Conversations",
+   "link_to": "Fateh AI Conversation",
    "type": "DocType"
   }
  ],
