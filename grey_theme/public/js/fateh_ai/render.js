@@ -370,6 +370,24 @@ export function build_preview_table(preview) {
 export function enhance(root, { title } = {}) {
 	render_charts(root);
 	root.querySelectorAll("table").forEach((t) => enhance_table(t, title));
+	// a report link inside a wide table ends up scrolled out of view: repeat it as a button row
+	root.querySelectorAll(".fai-table").forEach((wrap) => {
+		if (wrap.nextElementSibling && wrap.nextElementSibling.classList.contains("fai-report-links")) return;
+		const seen = new Set();
+		const row = document.createElement("div");
+		row.className = "fai-report-links";
+		wrap.querySelectorAll("a.fai-report-link").forEach((a) => {
+			const href = a.getAttribute("href");
+			if (seen.has(href)) return;
+			seen.add(href);
+			const copy = a.cloneNode(true);
+			const cell_row = a.closest("tr");
+			const first_cell = cell_row && cell_row.cells[0] ? cell_row.cells[0].innerText.trim() : "";
+			if (first_cell && !copy.innerText.includes(first_cell)) copy.textContent = `${copy.innerText} · ${first_cell}`;
+			row.append(copy);
+		});
+		if (row.children.length) wrap.after(row);
+	});
 	root.querySelectorAll("a.fai-report-link").forEach((a) => {
 		if (!a.querySelector(".fai-ico")) a.prepend(icon_el("chart"));
 		a.title = __("Open the report in the desk");

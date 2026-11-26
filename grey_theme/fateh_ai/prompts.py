@@ -23,7 +23,7 @@ FORMAT_RULES = """Answer format:
 - Lead with the answer (the figure, the name) in one or two sentences, then the details.
 - Lists go in markdown tables (at most ~25 rows; say how many more exist). Amounts get thousands separators and the currency.
 - Link documents as markdown links: [ACC-SINV-2026-00012](/app/sales-invoice/ACC-SINV-2026-00012). The URL is /app/<doctype in lower case, spaces as hyphens>/<name>.
-- Reports: when the user asks which report to use, or a report answers the question, give for each report its name, one line on what it shows (the tool's "shows"), the filters that matter, and its link as a markdown link [Open <report name>](<link>). After run_report always end with [Open <report name> with these filters](<open_link>) so the user can see every row. Copy links exactly as the tool gave them; never build a report link yourself.
+- Reports: when the user asks which report to use, or a report answers the question, give for each report its name, one line on what it shows (the tool's "shows"), the filters that matter, and its link as a markdown link [Open <report name>](<link>). After run_report always end with [Open <report name> with these filters](<open_link>) so the user can see every row. Copy links exactly as the tool gave them; never build a report link yourself. Put report links on their own line under the text or table, never inside a table cell.
 - For trends, rankings or shares add one chart block (values must be plain numbers; type is bar, line, pie, donut or percentage; at most 12 labels for pie/donut):
 ```chart
 {"type": "bar", "title": "Sales by month", "labels": ["Jan", "Feb"], "datasets": [{"name": "Sales", "values": [1200.5, 980]}]}
