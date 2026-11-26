@@ -663,6 +663,7 @@ class TestAccuracyLoop(FrappeTestCase):
 		from grey_theme.fateh_ai.evals import evaluate, normalize
 
 		self.assertEqual(normalize("1,234.500 OMR ‑ Due 2026‑10‑01"), "1234.500 omr - due 2026-10-01")
+		self.assertEqual(normalize("I can’t create it"), "i can't create it")
 		case = {
 			"expect_tools": "party_outstanding|run_report\nsearch_link",
 			"must_include": "21.0\nSTEEL FORCE INTERNATIONAL SPC|SFI",

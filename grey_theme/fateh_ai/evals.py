@@ -68,6 +68,9 @@ DEFAULT_CASES = [
 ]
 
 _DASHES = dict.fromkeys(map(ord, "‐‑‒–—−"), "-")
+_QUOTES = dict.fromkeys(map(ord, "‘’ʼ′"), "'")
+_DQUOTES = dict.fromkeys(map(ord, "“”″"), '"')
+CASE_PAUSE_S = 20  # let a per-minute token quota recover between questions
 
 
 def _lines(value):
@@ -76,7 +79,8 @@ def _lines(value):
 
 def normalize(text):
 	"""Lower case, plain dashes and spaces, no thousands separators: '1,234.500' == '1234.500'."""
-	text = html.unescape(cstr(text)).translate(_DASHES).replace(" ", " ").replace(" ", " ").lower()
+	text = html.unescape(cstr(text)).translate(_DASHES).translate(_QUOTES).translate(_DQUOTES)
+	text = text.replace(" ", " ").replace(" ", " ").lower()
 	text = re.sub(r"(?<=\d)[,٬](?=\d{3}\b)", "", text)
 	return re.sub(r"\s+", " ", text)
 
@@ -163,7 +167,9 @@ def run(eval_run):
 			fields=["name", "question", "expect_tools", "must_include", "must_not_include"],
 			order_by="creation asc",
 		)
-		for case in cases:
+		for n, case in enumerate(cases):
+			if n:
+				time.sleep(CASE_PAUSE_S)
 			result = ask(case.question)
 			failures = evaluate(case, result.answer, result.tools_used)
 			failures += [_("error: %(e)s") % {"e": e[:300]} for e in result.errors]
