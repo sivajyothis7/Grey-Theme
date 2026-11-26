@@ -327,7 +327,21 @@ class TestHistory(FrappeTestCase):
 		self.assertEqual(history[2]["content"][-1]["text"], "second question")
 
 
+def capture(events):
+	"""Collect only Fateh AI events; document inserts publish their own (list_update...)."""
+
+	def _capture(event, message=None, **kwargs):
+		if event == agent.EVENT:
+			events.append(message)
+
+	return _capture
+
+
 class TestAgentRun(FrappeTestCase):
+	# frappe.db.rollback is patched in these tests: the agent rolls back before saving an
+	# error, which in production only drops the failed step (the conversation was committed
+	# by the request), but here would also drop this test's uncommitted conversation.
+
 	def setUp(self):
 		frappe.set_user("Administrator")
 
@@ -350,7 +364,7 @@ class TestAgentRun(FrappeTestCase):
 		events = []
 		with patch.object(config, "get_settings", return_value=make_settings()), patch.object(
 			agent.providers, "stream_chat", side_effect=scripted
-		), patch.object(frappe, "publish_realtime", side_effect=lambda ev, msg, **kw: events.append(msg)):
+		), patch.object(frappe, "publish_realtime", side_effect=capture(events)), patch.object(frappe.db, "rollback"):
 			agent.run(conv, "run1", context={})
 
 		rows = frappe.get_all(
@@ -386,7 +400,7 @@ class TestAgentRun(FrappeTestCase):
 		events = []
 		with patch.object(config, "get_settings", return_value=make_settings()), patch.object(
 			agent.providers, "stream_chat", side_effect=failing
-		), patch.object(frappe, "publish_realtime", side_effect=lambda ev, msg, **kw: events.append(msg)):
+		), patch.object(frappe, "publish_realtime", side_effect=capture(events)), patch.object(frappe.db, "rollback"):
 			agent.run(conv, "run2")
 		last = frappe.get_all("Fateh AI Message", filters={"conversation": conv, "role": "assistant"}, fields=["is_error", "content"])
 		self.assertEqual(last[0].is_error, 1)
