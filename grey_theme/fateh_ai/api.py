@@ -12,6 +12,7 @@ import time
 
 import frappe
 from frappe import _
+from frappe.query_builder.functions import Count, IfNull
 from frappe.utils import cint, cstr, get_datetime, now_datetime, today
 
 from grey_theme.fateh_ai import agent, config, providers
@@ -60,9 +61,22 @@ def _clean_context(context):
 
 
 def _messages_today(user):
-	return frappe.db.count(
-		MESSAGE, {"owner": user, "role": "user", "creation": [">=", get_datetime(today())]}
-	)
+	"""Questions asked today, not counting accuracy-test conversations."""
+	msg = frappe.qb.DocType(MESSAGE)
+	conv = frappe.qb.DocType(CONVERSATION)
+	rows = (
+		frappe.qb.from_(msg)
+		.join(conv)
+		.on(conv.name == msg.conversation)
+		.select(Count(msg.name))
+		.where(
+			(msg.owner == user)
+			& (msg.role == "user")
+			& (msg.creation >= get_datetime(today()))
+			& (IfNull(conv.is_test, 0) == 0)
+		)
+	).run()
+	return rows[0][0] if rows else 0
 
 
 def _is_running(conversation):
@@ -196,7 +210,7 @@ def list_conversations(search: str | None = None, limit=60, start=0):
 	start = max(0, cint(start))
 	search = cstr(search).strip()
 
-	filters = {"user": user}
+	filters = {"user": user, "is_test": 0}
 	if search:
 		conv = frappe.qb.DocType(CONVERSATION)
 		msg = frappe.qb.DocType(MESSAGE)
@@ -232,7 +246,7 @@ def get_conversation(name: str):
 	rows = frappe.get_all(
 		MESSAGE,
 		filters={"conversation": name, "role": ["!=", "tool"]},
-		fields=["name", "role", "content", "steps", "is_error", "run_id", "creation", "model"],
+		fields=["name", "role", "content", "steps", "is_error", "run_id", "creation", "model", "feedback"],
 		order_by="creation asc",
 		limit=500,
 	)
@@ -272,6 +286,31 @@ def delete_conversation(name: str):
 	return {"deleted": name}
 
 
+@frappe.whitelist(methods=["POST"])
+def rate_answer(conversation: str, run_id: str, rating: str = "", note: str | None = None):
+	"""👍 / 👎 on an answer. Stored on the answer's last message for review (AI Bad Answers)."""
+	conversation = _own_conversation(conversation)
+	rating = cstr(rating).strip().title()
+	if rating not in ("Good", "Bad", ""):
+		frappe.throw(_("Rating must be Good or Bad."))
+	names = frappe.get_all(
+		MESSAGE,
+		filters={"conversation": conversation, "run_id": cstr(run_id).strip(), "role": "assistant"},
+		pluck="name",
+		order_by="creation desc",
+		limit=1,
+	)
+	if not names:
+		frappe.throw(_("Answer not found."))
+	frappe.db.set_value(
+		MESSAGE,
+		names[0],
+		{"feedback": rating or None, "feedback_note": cstr(note).strip()[:1000] or None},
+		update_modified=False,
+	)
+	return {"message": names[0], "feedback": rating}
+
+
 # ------------------------------------------------------------------ admin
 
 
@@ -308,3 +347,30 @@ def list_models():
 		return {"models": providers.list_models(settings)}
 	except providers.ProviderError as e:
 		frappe.throw(cstr(e))
+
+
+@frappe.whitelist(methods=["POST"])
+def start_eval_run():
+	"""Run the accuracy tests in the background; returns the Fateh AI Eval Run to watch."""
+	frappe.only_for("System Manager")
+	from grey_theme.fateh_ai import evals
+
+	settings = config.check_access()
+	if not config.is_configured(settings):
+		frappe.throw(_("Configure the provider, key and model first."))
+	busy = frappe.get_all(evals.RUN, filters={"status": ["in", ["Queued", "Running"]]}, pluck="name", limit=1)
+	if busy:
+		return {"name": busy[0], "already_running": 1}
+	created = evals.ensure_default_cases()
+	if not frappe.db.count(evals.CASE, {"enabled": 1}):
+		frappe.throw(_("There are no enabled test questions."))
+	doc = frappe.get_doc({"doctype": evals.RUN, "status": "Queued"}).insert(ignore_permissions=True)
+	frappe.enqueue(
+		"grey_theme.fateh_ai.evals.run",
+		queue="long",
+		timeout=3600,
+		enqueue_after_commit=True,
+		job_id=f"fateh_ai_eval::{doc.name}",
+		eval_run=doc.name,
+	)
+	return {"name": doc.name, "default_cases_created": created}

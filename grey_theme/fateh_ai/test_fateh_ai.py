@@ -611,3 +611,75 @@ class TestLegacyKeyPatch(FrappeTestCase):
 
 		migrate_ai_settings_keys.execute()  # idempotent: nothing left to migrate
 		self.assertEqual(get_decrypted_password(self.DT, self.DT, "api_key"), "gsk_test_123")
+
+
+# ------------------------------------------------------------------------------ accuracy loop
+
+
+class TestReportGuideSources(FrappeTestCase):
+	def test_docstring_summary(self):
+		from grey_theme.fateh_ai.report_guide import summarize_docstring
+
+		self.assertEqual(
+			summarize_docstring("Dead Stock", "Dead Stock: the stock on hand that has not moved. Second. Third."),
+			"the stock on hand that has not moved. Second",
+		)
+		self.assertEqual(summarize_docstring("MIS Profit and Loss", "MIS Profit and Loss; see sf_trading/mis.py."), "")
+		self.assertEqual(
+			summarize_docstring("COGS Drill", "COGS Drill\n──────────\nDrill for the trading account line."),
+			"Drill for the trading account line",
+		)
+
+	def test_site_note_wins_and_keywords_find_it(self):
+		from grey_theme.fateh_ai import report_guide
+
+		ar = frappe._dict(name="Accounts Receivable", report_type="Script Report", module="Accounts", is_standard="Yes")
+		site = {"Accounts Receivable": {"purpose": "Our receivables view.", "key_filters": "company", "keywords": ["dues"]}}
+		note = report_guide.note_for(ar, site=site, hooks={})
+		self.assertEqual((note["source"], note["purpose"]), ("site", "Our receivables view."))
+		self.assertGreater(report_guide.score(ar.name, ["dues"], note["purpose"], note["keywords"]), 3)
+		self.assertEqual(report_guide.note_for(ar, site={}, hooks={})["source"], "guide")
+
+
+class TestAccuracyLoop(FrappeTestCase):
+	def setUp(self):
+		frappe.set_user("Administrator")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+
+	def test_evaluate_checks(self):
+		from grey_theme.fateh_ai.evals import evaluate, normalize
+
+		self.assertEqual(normalize("1,234.500 OMR ‑ Due 2026‑10‑01"), "1234.500 omr - due 2026-10-01")
+		case = {
+			"expect_tools": "party_outstanding|run_report\nsearch_link",
+			"must_include": "21.0\nSTEEL FORCE INTERNATIONAL SPC|SFI",
+			"must_not_include": "draft",
+		}
+		good = "Outstanding: **21.000 OMR** under STEEL FORCE INTERNATIONAL SPC."
+		self.assertEqual(evaluate(case, good, ["search_link", "party_outstanding"]), [])
+		failures = evaluate(case, "0 OMR, the customer is a draft", ["party_outstanding"])
+		self.assertEqual(len(failures), 4)  # no search_link, no 21.0, no company, contains draft
+
+	def test_rate_answer_is_owner_only(self):
+		conv = new_conversation()
+		add_message(conv, "user", "q", run_id="rr")
+		add_message(conv, "assistant", "a", run_id="rr")
+		res = api.rate_answer(conv, "rr", "Bad", "wrong total")
+		self.assertEqual(
+			frappe.db.get_value("Fateh AI Message", res["message"], ["feedback", "feedback_note"]), ("Bad", "wrong total")
+		)
+		api.rate_answer(conv, "rr", "")
+		self.assertIsNone(frappe.db.get_value("Fateh AI Message", res["message"], "feedback"))
+		frappe.set_user(ensure_test_user())
+		with self.assertRaises(frappe.PermissionError):
+			api.rate_answer(conv, "rr", "Good")
+
+	def test_test_conversations_stay_out_of_history(self):
+		conv = frappe.get_doc(
+			{"doctype": "Fateh AI Conversation", "user": "Administrator", "title": "[test] x", "is_test": 1}
+		).insert(ignore_permissions=True)
+		with patch.object(config, "get_settings", return_value=make_settings()):
+			self.assertNotIn(conv.name, [c.name for c in api.list_conversations()])
+

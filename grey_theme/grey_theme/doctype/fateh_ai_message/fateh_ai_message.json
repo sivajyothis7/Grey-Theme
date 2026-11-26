@@ -16,7 +16,11 @@
   "content_section",
   "content",
   "blocks",
-  "steps"
+  "steps",
+  "feedback_section",
+  "feedback",
+  "column_break_feedback",
+  "feedback_note"
  ],
  "fields": [
   {
@@ -99,12 +103,36 @@
    "label": "Tool Steps (JSON)",
    "options": "JSON",
    "read_only": 1
+  },
+  {
+   "fieldname": "feedback_section",
+   "fieldtype": "Section Break",
+   "label": "Feedback"
+  },
+  {
+   "fieldname": "feedback",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Feedback",
+   "options": "\nGood\nBad",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_feedback",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "feedback_note",
+   "fieldtype": "Small Text",
+   "label": "Feedback Note",
+   "read_only": 1
   }
  ],
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-26 19:00:00.000000",
+ "modified": "2026-11-26 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Grey Theme",
  "name": "Fateh AI Message",

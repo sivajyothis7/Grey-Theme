@@ -11,7 +11,10 @@ frappe.route_options and QueryReport.set_route_filters() applies it to the repor
 (a JSON array string is parsed for multi-select filters).
 """
 
+import ast
 import json
+import os
+import re
 from urllib.parse import quote, urlencode
 
 import frappe
@@ -100,20 +103,129 @@ SYNONYMS = {
 }
 
 
-def describe(report) -> str:
-	"""One line on what a report shows."""
-	hit = GUIDE.get(report.name)
-	if hit:
-		return hit[0]
+# --------------------------------------------------------------------------------------------
+# Where a report's description comes from, first match wins:
+#   1. the site's own notes   AI Settings > Report Guide (an admin can describe any report)
+#   2. app hooks              hooks.py: fateh_ai_report_guide = ["my_app.ai.report_notes"], a function
+#                             returning {"Report Name": {"purpose": ..., "key_filters": ..., "keywords": ...}}
+#   3. the built-in GUIDE     common ERPNext / HRMS reports
+#   4. the report's own code  first sentences of its Python module docstring (read with ast, never imported)
+# --------------------------------------------------------------------------------------------
+
+_DOC_CACHE = {}  # report name -> docstring summary ("" when none), per process
+_HOOK_CACHE = {}
+
+
+def _site_notes() -> dict:
+	try:
+		doc = frappe.get_cached_doc("AI Settings")
+	except Exception:
+		return {}
+	notes = {}
+	for row in doc.get("report_notes") or []:
+		if row.report and row.purpose:
+			notes[row.report] = {
+				"purpose": cstr(row.purpose).strip(),
+				"key_filters": cstr(row.key_filters).strip() or None,
+				"keywords": [k.strip().lower() for k in cstr(row.keywords).split(",") if k.strip()],
+			}
+	return notes
+
+
+def _hook_notes() -> dict:
+	key = frappe.local.site
+	if key in _HOOK_CACHE:
+		return _HOOK_CACHE[key]
+	notes = {}
+	for path in frappe.get_hooks("fateh_ai_report_guide") or []:
+		try:
+			for name, note in (frappe.get_attr(path)() or {}).items():
+				if isinstance(note, str):
+					note = {"purpose": note}
+				notes[name] = {
+					"purpose": cstr(note.get("purpose")).strip(),
+					"key_filters": note.get("key_filters"),
+					"keywords": [k.strip().lower() for k in cstr(note.get("keywords")).split(",") if k.strip()],
+				}
+		except Exception:
+			frappe.log_error(title=f"Fateh AI report guide hook {path} failed", message=frappe.get_traceback())
+	_HOOK_CACHE[key] = notes
+	return notes
+
+
+_SEPARATOR = re.compile(r"^[\s\-─═=_*#]+$")
+_SEE_ALSO = re.compile(r"\s*\(?\bsee\s+[\w/.]+\.py\)?\.?", re.I)
+
+
+def summarize_docstring(name: str, doc: str) -> str:
+	"""The first one or two sentences of a report's docstring, without its title or rulers."""
+	lines = [line.strip() for line in cstr(doc).splitlines()]
+	lines = [line for line in lines if line and not _SEPARATOR.match(line)]
+	text = " ".join(lines)
+	# drop a leading "Report Name —" / "Report Name:" / "Report Name" title
+	for sep in (" — ", " - ", ": ", " -- ", " "):
+		if text.lower().startswith(name.lower() + sep.rstrip()):
+			text = text[len(name) :].lstrip(" —:;,-")
+			break
+	text = _SEE_ALSO.sub("", text).strip(" ;,.-")
+	if len(text) < 15:  # e.g. "MIS Profit and Loss; see sf_trading/x.py." says nothing
+		return ""
+	sentences = re.split(r"(?<=[.!?])\s+", text)
+	summary = " ".join(sentences[:2]).strip()
+	return summary[:300] + ("…" if len(summary) > 300 else "")
+
+
+def _docstring(report) -> str:
+	if report.name in _DOC_CACHE:
+		return _DOC_CACHE[report.name]
+	summary = ""
+	try:
+		if report.is_standard == "Yes" and report.module:
+			app = frappe.db.get_value("Module Def", report.module, "app_name")
+			folder = frappe.scrub(report.name)
+			path = frappe.get_app_path(app, frappe.scrub(report.module), "report", folder, folder + ".py")
+			if os.path.exists(path):
+				with open(path, encoding="utf-8") as f:
+					tree = ast.parse(f.read())
+				doc = ast.get_docstring(tree) or ""
+				if not doc:
+					fn = next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "execute"), None)
+					doc = ast.get_docstring(fn) if fn else ""
+				summary = summarize_docstring(report.name, doc or "")
+	except Exception:
+		summary = ""
+	_DOC_CACHE[report.name] = summary
+	return summary
+
+
+def note_for(report, site=None, hooks=None) -> dict:
+	"""{"purpose", "key_filters", "keywords", "source"} for a report. Pass site/hooks when
+	describing many reports at once so the notes are read only once."""
+	site = _site_notes() if site is None else site
+	hooks = _hook_notes() if hooks is None else hooks
+	for source, notes in (("site", site), ("app", hooks)):
+		hit = notes.get(report.name)
+		if hit and hit.get("purpose"):
+			return {**hit, "source": source}
+	if report.name in GUIDE:
+		purpose, filters = GUIDE[report.name]
+		return {"purpose": purpose, "key_filters": filters, "keywords": [], "source": "guide"}
+	doc = _docstring(report)
+	if doc:
+		return {"purpose": doc, "key_filters": None, "keywords": [], "source": "code"}
 	kind = report.report_type or "Report"
 	base = f" on {report.ref_doctype}" if report.ref_doctype else ""
 	module = f" ({report.module})" if report.module else ""
-	return f"{kind}{base}{module}."
+	return {"purpose": f"{kind}{base}{module}.", "key_filters": None, "keywords": [], "source": "metadata"}
+
+
+def describe(report) -> str:
+	"""One line on what a report shows."""
+	return note_for(report)["purpose"]
 
 
 def key_filters(report) -> str | None:
-	hit = GUIDE.get(report.name)
-	return hit[1] if hit else None
+	return note_for(report).get("key_filters")
 
 
 def link(report, filters=None) -> str:
@@ -132,17 +244,20 @@ def link(report, filters=None) -> str:
 	return url + ("?" + urlencode(params, quote_via=quote) if params else "")
 
 
-def score(name: str, words: list[str]) -> int:
-	"""How well a report matches the user's words (name and guide text)."""
+def score(name: str, words: list[str], purpose: str = "", keywords=()) -> int:
+	"""How well a report matches the user's words: name, description, keywords, synonyms."""
 	if not words:
 		return 1
-	text = (name + " " + (GUIDE.get(name, ("", ""))[0])).lower()
+	text = (name + " " + (purpose or GUIDE.get(name, ("", ""))[0])).lower()
+	keyword_text = " ".join(keywords).lower()
 	points = 0
 	for word in words:
 		if word in name.lower():
 			points += 3
 		elif word in text:
 			points += 1
+		if keyword_text and re.search(rf"\b{re.escape(word)}", keyword_text):
+			points += 4
 		if SYNONYMS.get(word) == name:
 			points += 4
 	return points

@@ -45,6 +45,15 @@ class AISettings(Document):
 		preset = PROVIDERS.get(self.provider) or {}
 		if not self.base_url and not preset.get("base_url"):
 			frappe.throw(_("Base URL is required for %(p)s.") % {"p": self.provider}, title=_("Missing Value"))
+		seen = set()
+		for row in self.get("report_notes") or []:
+			if row.report in seen:
+				frappe.throw(
+					_("Report %(r)s is listed twice in the Report Guide.") % {"r": row.report}, title=_("Duplicate Report")
+				)
+			seen.add(row.report)
+			row.keywords = ", ".join(k.strip().lower() for k in cstr(row.keywords).split(",") if k.strip()) or None
+
 		if self.enabled and not self.model and not preset.get("default_model"):
 			frappe.throw(
 				_("Model is required for %(p)s. Use Fetch Models to pick one.") % {"p": self.provider},

@@ -333,7 +333,29 @@ class BotTurn {
 		copy.append(icon_el("copy"));
 		copy.addEventListener("click", () => copy_text(text));
 		bar.append(copy);
+		if (this.run_id) {
+			[
+				["Good", "thumbup", __("Good answer")],
+				["Bad", "thumbdown", __("Wrong or unhelpful answer")],
+			].forEach(([rating, icon_name, title]) => {
+				const b = document.createElement("button");
+				b.type = "button";
+				b.className = "fai-icon-btn fai-rate";
+				b.dataset.rating = rating;
+				b.title = title;
+				b.append(icon_el(icon_name));
+				b.addEventListener("click", () => this.app.rate(this, rating));
+				bar.append(b);
+			});
+		}
 		this.body.append(bar);
+		this.show_rating();
+	}
+
+	show_rating() {
+		this.body.querySelectorAll(".fai-rate").forEach((b) => {
+			b.classList.toggle("active", b.dataset.rating === this.feedback);
+		});
 	}
 }
 
@@ -847,6 +869,7 @@ export class ChatApp {
 			} else {
 				turn.add_text_final(m.content);
 			}
+			if (m.feedback) turn.feedback = m.feedback;
 			(m.steps || []).forEach((s) => turn.add_step(s, { final: true }));
 		});
 		if (turn) turn.finish();
@@ -950,6 +973,33 @@ export class ChatApp {
 
 	retry() {
 		if (this.last_question) this.send(this.last_question);
+	}
+
+	// 👍 / 👎 — a second click on the same thumb clears it; 👎 asks (optionally) what was wrong
+	rate(turn, rating) {
+		if (!this.conversation || !turn.run_id) return;
+		const clear = turn.feedback === rating;
+		const save = (note) =>
+			call("rate_answer", {
+				conversation: this.conversation,
+				run_id: turn.run_id,
+				rating: clear ? "" : rating,
+				note: note || "",
+			}).then(() => {
+				turn.feedback = clear ? null : rating;
+				turn.show_rating();
+				if (!clear) frappe.show_alert({ message: __("Thanks for the feedback"), indicator: "green" }, 3);
+			});
+		if (rating === "Bad" && !clear) {
+			frappe.prompt(
+				{ fieldname: "note", fieldtype: "Small Text", label: __("What was wrong? (optional)") },
+				(values) => save(values.note),
+				__("Report a wrong answer"),
+				__("Send")
+			);
+		} else {
+			save("");
+		}
 	}
 
 	// ------------------------------------------------------------------ realtime

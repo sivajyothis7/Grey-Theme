@@ -73,6 +73,31 @@ frappe.ui.form.on("AI Settings", {
 
 		if (frm.doc.enabled) {
 			frm.add_custom_button(__("Open Assistant"), () => frappe.set_route("ai-chat"));
+
+			frm.add_custom_button(
+				__("Run Accuracy Tests"),
+				() => {
+					frappe.call({
+						method: "grey_theme.fateh_ai.api.start_eval_run",
+						freeze: true,
+						callback: (r) => {
+							const res = r.message || {};
+							if (res.already_running) frappe.show_alert(__("A test run is already in progress."));
+							else if (res.default_cases_created)
+								frappe.show_alert(__("Added {0} starter test questions.", [res.default_cases_created]));
+							frappe.set_route("Form", "Fateh AI Eval Run", res.name);
+						},
+					});
+				},
+				__("Accuracy")
+			);
+			frm.add_custom_button(__("Test Questions"), () => frappe.set_route("List", "Fateh AI Eval Case"), __("Accuracy"));
+			frm.add_custom_button(__("Test Results"), () => frappe.set_route("List", "Fateh AI Eval Run"), __("Accuracy"));
+			frm.add_custom_button(
+				__("Answers Marked Wrong"),
+				() => frappe.set_route("List", "Fateh AI Message", { feedback: "Bad" }),
+				__("Accuracy")
+			);
 		}
 	},
 });

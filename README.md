@@ -50,6 +50,18 @@ A read-only ERP assistant, off until **AI Settings → Enabled** is ticked.
   written to **Fateh AI Audit Log**, which Log Settings prunes after 90 days. Raw SQL is off
   by default, and when enabled it is available to System Managers only.
 
+- **Report guide**: asked which report to use, it names the report, says what it shows and
+  which filters matter, and gives a button that opens the report with those filters filled in.
+  Descriptions come from, in order: the site's own notes (**AI Settings → Report Guide**), apps
+  that register `fateh_ai_report_guide` in hooks.py (a function returning
+  `{"Report": {"purpose", "key_filters", "keywords"}}`), a built-in guide to the common ERPNext
+  reports, and finally the report's own code docstring.
+- **Accuracy loop**: 👍 / 👎 on every answer (👎 asks what was wrong) — review them under
+  *AI Bad Answers*. **Fateh AI Eval Case** holds test questions with checks (tools that must be
+  used, text the answer must / must not contain); *AI Settings → Accuracy → Run Accuracy Tests*
+  asks them all through the real assistant in the background and scores each answer
+  (**Fateh AI Eval Run**). Test chats stay out of users' history and daily limits.
+
 Design and security model: [docs/fateh-ai-v2-design.md](docs/fateh-ai-v2-design.md).
 
 #### License

@@ -8,6 +8,7 @@
   "title",
   "user",
   "pinned",
+  "is_test",
   "column_break_meta",
   "last_message_at",
   "message_count",
@@ -40,6 +41,15 @@
    "fieldname": "pinned",
    "fieldtype": "Check",
    "label": "Pinned"
+  },
+  {
+   "default": "0",
+   "description": "Created by an accuracy test run; hidden from the chat history.",
+   "fieldname": "is_test",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Accuracy Test",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_meta",
@@ -92,7 +102,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-26 12:00:00.000000",
+ "modified": "2026-11-26 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Grey Theme",
  "name": "Fateh AI Conversation",

@@ -1028,6 +1028,21 @@ pre:hover > .fai-copy-code {
 	opacity: 1;
 }
 
+.fai-rate.active {
+	opacity: 1;
+	color: var(--fai-accent);
+	background: var(--fai-tint);
+}
+
+.fai-rate.active[data-rating="Bad"] {
+	color: var(--fai-err);
+	background: color-mix(in srgb, var(--fai-err) 10%, transparent);
+}
+
+.fai-actions:has(.fai-rate.active) {
+	opacity: 1;
+}
+
 // ------------------------------------------------------------------------- empty state
 
 .fai-empty {

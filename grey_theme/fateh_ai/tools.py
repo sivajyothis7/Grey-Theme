@@ -993,10 +993,18 @@ def list_reports(keyword=None, doctype=None):
 	if doctype:
 		filters["ref_doctype"] = cstr(doctype).strip()
 	# report names are not sensitive; every candidate is permission-checked before it is returned
-	candidates = frappe.get_all("Report", filters=filters, fields=["name"], limit=2000)
+	candidates = frappe.get_all(
+		"Report", filters=filters, fields=["name", "module", "is_standard", "report_type", "ref_doctype"], limit=2000
+	)
+	site, hooks = report_guide._site_notes(), report_guide._hook_notes()
+	notes = {row.name: report_guide.note_for(row, site, hooks) for row in candidates}
+	described = {"site": 0, "app": 1, "guide": 2, "code": 3, "metadata": 4}
 	ranked = sorted(
-		((report_guide.score(row.name, words), row.name) for row in candidates),
-		key=lambda pair: (-pair[0], pair[1] not in report_guide.GUIDE, pair[1]),
+		(
+			(report_guide.score(row.name, words, notes[row.name]["purpose"], notes[row.name]["keywords"]), row.name)
+			for row in candidates
+		),
+		key=lambda pair: (-pair[0], described[notes[pair[1]]["source"]], pair[1]),
 	)
 	out = []
 	for points, name in ranked:
@@ -1006,15 +1014,16 @@ def list_reports(keyword=None, doctype=None):
 			report = _report_permitted(name)
 		except (frappe.PermissionError, ToolError):
 			continue
+		note = notes[name]
 		item = {
 			"report": report.name,
-			"shows": report_guide.describe(report),
+			"shows": note["purpose"],
 			"based_on": report.ref_doctype,
 			"type": report.report_type,
 			"link": report_guide.link(report),
 		}
-		if report_guide.key_filters(report):
-			item["key_filters"] = report_guide.key_filters(report)
+		if note.get("key_filters"):
+			item["key_filters"] = note["key_filters"]
 		if report.prepared_report:
 			item["note"] = "background report: open it in the desk; it cannot run in the chat"
 		out.append(item)

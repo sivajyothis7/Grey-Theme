@@ -26,6 +26,8 @@
   "behaviour_section",
   "extra_instructions",
   "enable_sql_tool",
+  "report_guide_section",
+  "report_notes",
   "legacy_section",
   "default_provider",
   "deepseek_api_key",
@@ -166,6 +168,19 @@
    "label": "Allow Read-only SQL for System Managers"
   },
   {
+   "fieldname": "report_guide_section",
+   "fieldtype": "Section Break",
+   "label": "Report Guide",
+   "collapsible": 1,
+   "description": "Describe this site's own reports so the assistant can recommend them. Built-in descriptions cover the common ERPNext reports; custom reports are otherwise described from their code."
+  },
+  {
+   "fieldname": "report_notes",
+   "fieldtype": "Table",
+   "label": "Report Notes",
+   "options": "Fateh AI Report Note"
+  },
+  {
    "collapsible": 1,
    "fieldname": "legacy_section",
    "fieldtype": "Section Break",
@@ -199,7 +214,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-26 12:00:00.000000",
+ "modified": "2026-11-26 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Grey Theme",
  "name": "AI Settings",
