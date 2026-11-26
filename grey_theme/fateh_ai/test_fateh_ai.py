@@ -327,6 +327,29 @@ class TestTools(FrappeTestCase):
 		self.assertNotIn("run_sql_select", [t["name"] for t in tools.get_tools(sql_settings)])
 		self.assertEqual(self.run_tool("run_sql_select", {"query": "select 1"}, sql_settings).status, "Denied")
 
+	def test_report_links_prefill_filters(self):
+		from grey_theme.fateh_ai import report_guide
+
+		ar = frappe._dict(name="Accounts Receivable", report_type="Script Report", ref_doctype="Sales Invoice")
+		link = report_guide.link(ar, {"company": "Steel Force WLL", "customer": ["A", "B"], "empty": None, "flag": True})
+		self.assertEqual(
+			link,
+			"/app/query-report/Accounts%20Receivable?company=Steel%20Force%20WLL&customer=%5B%22A%22%2C%20%22B%22%5D&flag=1",
+		)
+		builder = frappe._dict(name="My Open Orders", report_type="Report Builder", ref_doctype="Sales Order")
+		self.assertEqual(report_guide.link(builder), "/app/sales-order/view/report/My%20Open%20Orders")
+		self.assertIn("ageing", report_guide.describe(ar))
+
+	def test_list_reports_understands_plain_words(self):
+		if not frappe.db.exists("Report", "Accounts Receivable"):
+			self.skipTest("ERPNext not installed")
+		res = self.run_tool("list_reports", {"keyword": "overdue customers"})
+		self.assertEqual(res.status, "Success", res.error)
+		first = json.loads(res.content)["reports"][0]
+		self.assertEqual(first["report"], "Accounts Receivable")
+		self.assertTrue(first["link"].startswith("/app/query-report/Accounts%20Receivable"))
+		self.assertTrue(first["shows"])
+
 	def test_js_report_filter_extraction(self):
 		script = """frappe.query_reports["X"] = { filters: [
 			{ fieldname: "company", label: __("Company"), fieldtype: "Link", options: "Company", reqd: 1,

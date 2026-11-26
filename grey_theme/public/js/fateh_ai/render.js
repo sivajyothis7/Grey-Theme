@@ -67,6 +67,9 @@ function clean_tree(node) {
 			const href = el.getAttribute("href") || "";
 			if (href === "/app" || href.startsWith("/app/")) {
 				el.setAttribute("data-fai-route", href);
+				if (href.startsWith("/app/query-report/") || href.includes("/view/report/")) {
+					el.className = "fai-report-link"; // set by us after the attribute whitelist
+				}
 			} else if (href && !href.startsWith("#")) {
 				el.setAttribute("target", "_blank");
 				el.setAttribute("rel", "noopener noreferrer nofollow");
@@ -367,6 +370,10 @@ export function build_preview_table(preview) {
 export function enhance(root, { title } = {}) {
 	render_charts(root);
 	root.querySelectorAll("table").forEach((t) => enhance_table(t, title));
+	root.querySelectorAll("a.fai-report-link").forEach((a) => {
+		if (!a.querySelector(".fai-ico")) a.prepend(icon_el("chart"));
+		a.title = __("Open the report in the desk");
+	});
 	root.querySelectorAll("pre").forEach((pre) => {
 		const code = pre.querySelector("code");
 		if (!code || pre.querySelector(".fai-copy-code")) return;

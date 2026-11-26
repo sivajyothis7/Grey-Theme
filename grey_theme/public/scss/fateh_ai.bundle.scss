@@ -573,6 +573,34 @@ pre:hover > .fai-copy-code {
 	display: grid;
 }
 
+.fai-md a.fai-report-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin: 2px 4px 2px 0;
+	padding: 4px 12px 4px 9px;
+	border: 1px solid color-mix(in srgb, var(--fai-accent) 35%, var(--fai-border));
+	border-radius: 999px;
+	background: var(--fai-tint);
+	color: var(--fai-accent);
+	font-size: 13px;
+	font-weight: 500;
+	line-height: 1.4;
+	text-decoration: none;
+	vertical-align: middle;
+	transition: background 0.15s ease, border-color 0.15s ease;
+
+	.fai-ico {
+		width: 14px;
+		height: 14px;
+	}
+	&:hover {
+		background: var(--fai-tint-strong);
+		border-color: var(--fai-accent);
+		text-decoration: none;
+	}
+}
+
 // ------------------------------------------------------------------------- tables & charts
 
 .fai-table {

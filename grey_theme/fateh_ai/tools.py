@@ -20,6 +20,8 @@ import frappe
 from frappe import _
 from frappe.utils import cint, cstr, flt, getdate, nowdate, strip_html
 
+from grey_theme.fateh_ai import report_guide
+
 MAX_ROWS = 200
 DEFAULT_ROWS = 20
 MAX_RESULT_CHARS = 16000
@@ -946,33 +948,54 @@ def _report_permitted(report_name):
 
 @tool(
 	"list_reports",
-	"Find standard/custom reports the user can run (e.g. 'Accounts Receivable', 'Stock Balance', 'General Ledger', "
-	"'Gross Profit'). Prefer a report when the user asks for a ledger-accurate figure.",
+	"Find reports the user can run, with what each one shows and a link that opens it. Use when the user asks "
+	"which report to look at, or for ledger-accurate figures (ageing, balances, P&L, stock valuation). "
+	"Matches report names and plain words such as 'overdue', 'profit', 'ageing', 'stock value'.",
 	{
-		"keyword": {"type": "string", "description": "Part of the report name, e.g. 'receivable', 'stock'."},
+		"keyword": {"type": "string", "description": "Words describing what the user wants, e.g. 'overdue customers', 'stock value'."},
 		"doctype": {"type": "string", "description": "Optional: reports based on this DocType."},
 	},
 	label="Finding reports",
 )
 def list_reports(keyword=None, doctype=None):
+	words = [w for w in re.split(r"[^\w&]+", cstr(keyword).lower()) if len(w) > 2 or w == "p&l"][:6]
 	filters = {"disabled": 0}
-	if keyword:
-		filters["name"] = ["like", f"%{cstr(keyword).strip()}%"]
 	if doctype:
 		filters["ref_doctype"] = cstr(doctype).strip()
-	candidates = frappe.get_all(
-		"Report", filters=filters, fields=["name", "ref_doctype", "report_type", "module"], order_by="name asc", limit=60
+	# report names are not sensitive; every candidate is permission-checked before it is returned
+	candidates = frappe.get_all("Report", filters=filters, fields=["name"], limit=2000)
+	ranked = sorted(
+		((report_guide.score(row.name, words), row.name) for row in candidates),
+		key=lambda pair: (-pair[0], pair[1] not in report_guide.GUIDE, pair[1]),
 	)
 	out = []
-	for row in candidates:
+	for points, name in ranked:
+		if words and points <= 0:
+			break
 		try:
-			_report_permitted(row.name)
+			report = _report_permitted(name)
 		except (frappe.PermissionError, ToolError):
 			continue
-		out.append({"report": row.name, "based_on": row.ref_doctype, "type": row.report_type, "module": row.module})
-		if len(out) >= 25:
+		item = {
+			"report": report.name,
+			"shows": report_guide.describe(report),
+			"based_on": report.ref_doctype,
+			"type": report.report_type,
+			"link": report_guide.link(report),
+		}
+		if report_guide.key_filters(report):
+			item["key_filters"] = report_guide.key_filters(report)
+		if report.prepared_report:
+			item["note"] = "background report: open it in the desk; it cannot run in the chat"
+		out.append(item)
+		if len(out) >= 12:
 			break
-	return {"reports": out, "_row_count": len(out)}
+	return {
+		"reports": out,
+		"note": "Give the user each report's link as a markdown link, copied exactly.",
+		"_row_count": len(out),
+		"_preview": _preview(out, ["report", "shows"]),
+	}
 
 
 _JS_FILTER_RE = re.compile(r"fieldname\s*:\s*[\"']([A-Za-z0-9_]+)[\"']")
@@ -1012,7 +1035,7 @@ def _extract_js_filters(script):
 
 @tool(
 	"get_report_filters",
-	"Show the filters a report accepts (fieldnames, which are required). Call before run_report.",
+	"Show what a report shows, the filters it accepts (fieldnames, which are required) and its link. Call before run_report.",
 	{"report_name": {"type": "string"}},
 	required=("report_name",),
 	label="Checking report filters",
@@ -1032,9 +1055,11 @@ def get_report_filters(report_name):
 		filters.append({"fieldname": row.fieldname, "label": row.label, "fieldtype": row.fieldtype, "options": row.options, "required": cint(row.mandatory)})
 	return {
 		"report": report.name,
+		"shows": report_guide.describe(report),
 		"type": report.report_type,
 		"based_on": report.ref_doctype,
 		"filters": filters,
+		"link": report_guide.link(report),
 		"note": "Dates as YYYY-MM-DD. Pass filters as an object {fieldname: value}.",
 	}
 
@@ -1055,7 +1080,8 @@ def _normalize_columns(columns):
 
 @tool(
 	"run_report",
-	"Run a report the user may access and return its rows (first 50 by default). Use get_report_filters first.",
+	"Run a report the user may access and return its rows (first 50 by default) plus open_link, which opens the "
+	"same report with the same filters in the desk. Use get_report_filters first.",
 	{
 		"report_name": {"type": "string"},
 		"filters": {"type": "object", "description": "{fieldname: value}. Dates as YYYY-MM-DD."},
@@ -1075,10 +1101,12 @@ def run_report(report_name, filters=None, limit=None):
 
 	from frappe.desk.query_report import run as run_query_report
 
+	open_link = report_guide.link(report, filters)
 	result = run_query_report(report_name=report.name, filters=filters, ignore_prepared_report=False) or {}
 	if result.get("prepared_report"):
 		raise ToolError(
-			_("%(r)s is a background (prepared) report and cannot run inside the chat. Ask the user to open it from the desk.") % {"r": report.name}
+			_("%(r)s is a background (prepared) report and cannot run inside the chat. Give the user this link to open it with these filters: %(link)s")
+			% {"r": report.name, "link": open_link}
 		)
 
 	columns = _normalize_columns(result.get("columns"))
@@ -1102,6 +1130,7 @@ def run_report(report_name, filters=None, limit=None):
 	return {
 		"report": report.name,
 		"filters": filters,
+		"open_link": open_link,
 		"columns": [{"field": c["field"], "label": c["label"], "type": c["type"]} for c in columns],
 		"rows": rows,
 		"total_rows": total,
