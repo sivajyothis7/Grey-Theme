@@ -622,7 +622,7 @@ class TestReportGuideSources(FrappeTestCase):
 
 		self.assertEqual(
 			summarize_docstring("Dead Stock", "Dead Stock: the stock on hand that has not moved. Second. Third."),
-			"the stock on hand that has not moved. Second",
+			"the stock on hand that has not moved. Second.",
 		)
 		self.assertEqual(summarize_docstring("MIS Profit and Loss", "MIS Profit and Loss; see sf_trading/mis.py."), "")
 		self.assertEqual(
