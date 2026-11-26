@@ -1287,6 +1287,10 @@ def party_outstanding(party_type, party=None, company=None, overdue_only=False, 
 	columns = ["party", "company", "currency", "outstanding", "invoices", "oldest_due_date", "days_overdue"]
 	return {
 		"party_type": party_type,
+		"basis": (
+			"Submitted invoices with an unpaid balance; credit notes/returns count as negative amounts; "
+			"unallocated advances and journal entries are NOT deducted (the Accounts Receivable/Payable report does that)."
+		),
 		"rows": clean,
 		"note": note,
 		"_row_count": len(clean),
