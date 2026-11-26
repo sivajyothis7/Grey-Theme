@@ -44,6 +44,18 @@ MAX_RETRIES = 3
 _TRY_AGAIN_RE = re.compile(r"try again in\s+(?:(\d+)m)?\s*([\d.]+)\s*(ms|s)", re.I)
 
 
+def _wait(seconds, should_stop=None):
+	"""Sleep in short slices so a Stop pressed during a rate-limit wait is honoured at once."""
+	end = time.monotonic() + seconds
+	while True:
+		if should_stop and should_stop():
+			raise StopRequested()
+		left = end - time.monotonic()
+		if left <= 0:
+			return
+		time.sleep(min(0.5, left))
+
+
 def _retry_after(resp, message):
 	"""Seconds the provider asked us to wait (Retry-After header or Groq's 'try again in 5.9s')."""
 	header = resp.headers.get("retry-after") if getattr(resp, "headers", None) else None
@@ -105,7 +117,7 @@ def stream_chat(settings, *, messages, system, tools=None, tool_choice="auto", s
 					wait = e.retry_after if e.retry_after is not None else min(2**attempt, 8)
 					if wait <= MAX_RETRY_WAIT:
 						attempt += 1
-						time.sleep(max(0.5, wait) + 0.5)
+						_wait(max(0.5, wait) + 0.5, should_stop)
 						continue
 				if e.status == 429 and model != settings.models[-1]:
 					break  # rate-limited on this model: the next one has its own quota
@@ -114,7 +126,7 @@ def stream_chat(settings, *, messages, system, tools=None, tool_choice="auto", s
 				last_error = ProviderError(_("Could not reach the model provider: %(err)s") % {"err": cstr(e)})
 				if not yielded and attempt < MAX_RETRIES:
 					attempt += 1
-					time.sleep(min(2**attempt, 8))
+					_wait(min(2**attempt, 8), should_stop)
 					continue
 				raise last_error from e
 

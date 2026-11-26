@@ -123,6 +123,13 @@ class TestProviders(FrappeTestCase):
 		self.assertEqual(json.loads(post.call_args_list[1].kwargs["data"])["model"], "model-b")
 		self.assertEqual(events[0], {"type": "model", "model": "model-b"})
 
+	def test_stop_interrupts_a_rate_limit_wait(self):
+		limited = FakeResponse(status=429, body={"error": {"message": "Rate limit reached. Please try again in 20s."}})
+		with patch.object(providers.requests, "post", return_value=limited), patch.object(providers.time, "sleep") as sleep:
+			with self.assertRaises(providers.StopRequested):
+				list(providers.stream_chat(make_settings(models=["only"]), messages=[], system="s", should_stop=lambda: True))
+		sleep.assert_not_called()
+
 	def test_bad_key_is_not_retried(self):
 		denied = FakeResponse(status=401, body={"error": {"message": "invalid api key"}})
 		with patch.object(providers.requests, "post", return_value=denied) as post:
